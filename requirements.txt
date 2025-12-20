@@ -1,0 +1,16 @@
+# API
+fastapi
+uvicorn
+pandas
+python-dotenv
+
+# ML 
+scikit-learn
+joblib
+pydantic
+numpy
+
+# Base de données
+sqlalchemy
+psycopg2-binary
+
