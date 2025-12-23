@@ -1,0 +1,9 @@
+# data
+shapes.txt
+agency.txt
+stop_times.txt
+*.zip
+*.pb
+*.gz
+.env
+.DS_Store
