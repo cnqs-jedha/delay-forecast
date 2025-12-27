@@ -2,9 +2,9 @@ name: CI/CD pour FastAPI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ branch-fastapi, main, master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ branch-fastapi, main, master ]
 
 jobs:
   # Job de test (CI)
