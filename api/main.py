@@ -5,9 +5,6 @@ from api.model import model_instance
 from api.database import SessionLocal, engine, get_db
 from api import data_structure
 
-# Création des tables dans la base de données
-data_structure.Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="API Delay Forecast",
     description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports parisiens en fonction de la météo et des conditions de circulation",
@@ -22,7 +19,7 @@ async def root():
 async def predict(data: PredictionInput, db: Session = Depends(get_db)):
     
     # On transforme l'objet Pydantic en dictionnaire d'un coup
-    features = data.dict()
+    features = data.model_dump()
     print(f"--- Nouvelle requête reçue ---")
     print(f"Données d'entrée: {features}")
     
@@ -42,4 +39,6 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
+    # On crée les tables uniquement quand on lance l'app directement (pas pendant les tests)
+    data_structure.Base.metadata.create_all(bind=engine)
     uvicorn.run(app, host="0.0.0.0", port=8000)

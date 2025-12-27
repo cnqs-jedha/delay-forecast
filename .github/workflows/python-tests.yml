@@ -25,8 +25,8 @@ jobs:
 
     - name: Lancement des tests
       env:
-        # On ajoute une variable d'environnement pour satisfaire le check de démarrage de l'API
-        DATABASE_URI: "postgresql://postgres:postgres@localhost:5432/postgres"
+        # On utilise SQLite même pour l'app globale pendant les tests pour éviter toute erreur de connexion
+        DATABASE_URI: "sqlite:///./ci_temp.db"
         PYTHONPATH: .
       run: |
         pytest
