@@ -5,6 +5,7 @@ from typing import List
 class PredictionInput(BaseModel):
     line: int
     weather: str
+    # etc ...
 
 # Structure pour les données de sortie
 class PredictionOutput(BaseModel):

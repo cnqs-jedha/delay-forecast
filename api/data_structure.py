@@ -6,7 +6,11 @@ class PredictionLog(Base):
     __tablename__ = "prediction_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # Features
     line = Column(Integer)
     weather = Column(String)
+    
     prediction = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    # etc ...

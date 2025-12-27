@@ -9,8 +9,12 @@ scikit-learn
 joblib
 pydantic
 numpy
+pandas
 
 # Base de données
 sqlalchemy
 psycopg2-binary
 
+# Tests
+pytest
+httpx

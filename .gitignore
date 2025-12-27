@@ -11,3 +11,6 @@ htmlcov/
 *.joblib
 *.pkl
 *.models
+
+# Fichiers customs à ignorer
+test.db

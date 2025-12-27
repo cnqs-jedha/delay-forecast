@@ -21,3 +21,6 @@ Dockerfile
 .pytest_cache/
 *.joblib
 *.pkl
+
+# Fichiers customs à ignorer
+test.db
