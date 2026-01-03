@@ -14,7 +14,7 @@ class Settings:
     
     # Base de données NeonDB (pour lire les logs de prédiction)
     DATABASE_URL: str = os.getenv(
-        "NEON_DATABASE_URL",
+        "DATABASE_URL",
         "postgresql://user:password@localhost:5432/delay_forecast"
     )
     

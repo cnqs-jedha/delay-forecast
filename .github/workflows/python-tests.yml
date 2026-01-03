@@ -26,7 +26,7 @@ jobs:
     - name: Lancement des tests
       env:
         # On utilise SQLite même pour l'app globale pendant les tests pour éviter toute erreur de connexion
-        DATABASE_URI: "sqlite:///./ci_temp.db"
+        DATABASE_URL: "sqlite:///./ci_temp.db"
         PYTHONPATH: .
       run: |
         pytest

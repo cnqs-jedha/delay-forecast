@@ -114,7 +114,7 @@ services:
     env_file:
       - .env
     environment:
-      NEON_DATABASE_URL: ${NEON_DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
       DRIFT_THRESHOLD: ${DRIFT_THRESHOLD:-0.1}
     volumes:
       - evidently_reports:/app/reports
