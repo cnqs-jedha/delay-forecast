@@ -1,6 +1,9 @@
 # Secrets (NE JAMAIS COMMITTER)
 .env
 
+# Conversations privées
+docs/private/
+
 # Python
 __pycache__/
 *.py[cod]

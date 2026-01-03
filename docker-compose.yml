@@ -111,6 +111,27 @@ services:
       timeout: 5s
       retries: 20
 
+  evidently:
+    build:
+      context: .
+      dockerfile: services/evidently/Dockerfile
+    container_name: evidently
+    env_file:
+      - .env
+    environment:
+      NEON_DATABASE_URL: ${NEON_DATABASE_URL}
+      DRIFT_THRESHOLD: ${DRIFT_THRESHOLD:-0.1}
+    volumes:
+      - evidently_reports:/app/reports
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health | grep -q healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   airflow_db_data:
   mlflow_data:
+  evidently_reports:
