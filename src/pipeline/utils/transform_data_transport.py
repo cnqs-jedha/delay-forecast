@@ -23,9 +23,10 @@ def transform_S3_to_neon(file_name):
         ts_hour = ((ts + 1800) // 3600) * 3600
         row["timestamp_hour"] = ts_hour
 
-        row["datetime_rounded"] = datetime.fromtimestamp(ts_hour, tz=timezone.utc).isoformat()
+        row["timestamp_rounded"] = datetime.fromtimestamp(ts_hour, tz=timezone.utc).isoformat()
         row["hour"] = (row["timestamp_hour"] // 3600) % 24
         row.pop("timestamp_hour", None)
+        row.pop("timestamp", None)
         
         row["bus_nbr"] = "541"
     

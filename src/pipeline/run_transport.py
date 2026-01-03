@@ -22,13 +22,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2025-03-15"
-DATE_END = "2025-03-16"
+DATE_BEGIN = "2025-01-13"
+DATE_END = "2025-01-19"
 
 start = datetime.strptime(DATE_BEGIN, "%Y-%m-%d")
 end = datetime.strptime(DATE_END, "%Y-%m-%d")
 
 datas = []
+bad_days = []
 
 current = start
 
@@ -42,33 +43,45 @@ while current <= end:
 
     # New day
     logger.info(current_string)
+    try:
+        r_history = call_koda_history_api(current_string)
+        r_reference = call_koda_reference_api(current_string)
 
-    r_history = call_koda_history_api(current_string)
-    r_reference = call_koda_reference_api(current_string)
+        # Récupération des données
+        # Lit les données d'historique par batch
+        history_entities, bad_files = read_koda_history_day_stream(r_history, 500)
 
-    # Récupération des données
-    # Lit les données d'historique par batch
-    history_entities, bad_files = read_koda_history_day_stream(r_history, 500)
+        # Lit les données de références de route et trips
+        reference_routes = read_koda_reference_data(r_reference, "routes")
+        reference_trips = read_koda_reference_data(r_reference, "trips")
 
-    # Lit les données de références de route et trips
-    reference_routes = read_koda_reference_data(r_reference, "routes")
-    reference_trips = read_koda_reference_data(r_reference, "trips")
+        # Filtrer les données par ligne de bus
+        filtered_data = filter_by_bus_route(bus_number, reference_routes, reference_trips, history_entities, max_bus_per_hour)
+        datas.extend(filtered_data)
 
-    # Filtrer les données par ligne de bus
-    filtered_data = filter_by_bus_route(bus_number, reference_routes, reference_trips, history_entities, max_bus_per_hour)
-    datas.extend(filtered_data)
+        if bad_files:
+            logger.warning(
+                "⚠️ %s — fichiers ignorés: %d",
+                current_string,
+                len(bad_files),
+            )
 
-    # Nettoie pour vider la RAM
-    del r_history, r_reference
-    del history_entities, bad_files
-    del reference_routes, reference_trips
-    del filtered_data
+    except Exception as e:
+        logger.exception("❌ Jour %s ignoré", current_string)
+        bad_days.append((current_string, repr(e)))
 
-    gc.collect()
-    # Ajoute un jour
-    current += timedelta(days=1)
+    finally:
+        # Nettoie pour vider la RAM
+        del r_history, r_reference
+        del history_entities, bad_files
+        del reference_routes, reference_trips
+        del filtered_data
 
-logger.info(datas[:200])
+        gc.collect()
+        # Ajoute un jour
+        current += timedelta(days=1)
+
+logger.info(datas[:20])
 
 ################
 ##ENVOYER A S3## TODO
@@ -79,6 +92,7 @@ with open(f"data/S3/history_transport_{DATE_BEGIN}-{DATE_END}.json", "w", encodi
 
 logger.info("c'est enregistré")
 
+# VERIFIER QU4IL ENVOIE TOUTES LES DONNEES EN DB !!!!
 # Transform data to database
 json_name = f"history_transport_{DATE_BEGIN}-{DATE_END}.json"
 datas_S3 = transform_S3_to_neon(json_name)
@@ -86,40 +100,8 @@ datas_S3 = transform_S3_to_neon(json_name)
 logger.info(datas_S3[:20])
 
 #LOAD TO NEON
-# logger = logging.getLogger("NEON LOADER")
+logger = logging.getLogger("NEON LOADER")
 
-# load_dotenv()
-# DATABASE_URL = os.getenv("DATABASE_URL")
+load_parquet_to_neon("stg_transport_archive", datas_S3)
 
-# def load_parquet_to_neon(parquet_path: str, table_name: str, if_exists: str = "replace") -> None:
-#     if not DATABASE_URL:
-#         raise RuntimeError("DATABASE_URL manquante (env var).")
-
-#     if not os.path.exists(parquet_path):
-#         raise FileNotFoundError(f"Fichier introuvable: {parquet_path}")
-
-#     logger.info("Lecture parquet: %s", parquet_path)
-#     df = pd.read_parquet(parquet_path)
-
-#     logger.info("Connexion Neon + load vers %s (%d lignes)", table_name, len(df))
-#     engine = create_engine(DATABASE_URL)
-
-#     df.to_sql(
-#         table_name,
-#         engine,
-#         if_exists=if_exists,
-#         index=False,
-#         chunksize=10_000,
-#         method="multi",
-#     )
-
-#     logger.info("OK: %s chargée", table_name)
-
-# data_path = "data/S3"
-# file_name = f"data/S3/history_transport_{DATE_BEGIN}-{DATE_END}.json"
-
-# load_parquet_to_neon(
-#     parquet_path=os.path.join(data_path, file_name),
-#     table_name="stg_transport_archive",
-#     if_exists="append",
-# )
+logger.warning("Jours ignorés: %s", bad_days)

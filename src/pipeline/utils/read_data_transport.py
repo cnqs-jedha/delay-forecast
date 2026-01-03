@@ -33,9 +33,21 @@ def read_koda_history_day_stream(request, items_by_batch=400):
         feed = gtfs_realtime_pb2.FeedMessage()
 
         try:
-            archive_bytes.seek(0)
-            with py7zr.SevenZipFile(archive_bytes, mode="r") as z:
-                candidates = [n for n in z.getnames() if n.lower().endswith(".pb")]
+            try:
+                archive_bytes.seek(0)
+                with py7zr.SevenZipFile(archive_bytes, mode="r") as z:
+                    candidates = [n for n in z.getnames() if n.lower().endswith(".pb")]
+
+            except py7zr.exceptions.Bad7zFile as e:
+                logger.error("❌ Archive invalide (pas un 7z) — jour ignoré")
+                bad_files.append(("__archive__", repr(e)))
+                return
+
+            except Exception as e:
+                logger.exception("❌ Erreur ouverture archive — jour ignoré")
+                bad_files.append(("__archive__", repr(e)))
+                return
+
 
             for i in range(0, len(candidates), items_by_batch):
                 
