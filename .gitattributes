@@ -1,0 +1,17 @@
+# Gestion des fins de ligne Windows/Mac/Linux
+* text=auto
+
+# Forcer LF pour les scripts shell (exécutés dans Docker/Linux)
+*.sh text eol=lf
+
+# Forcer LF pour les fichiers Docker
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# Fichiers binaires (ne pas convertir)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

@@ -1,1 +1,0 @@
-# Permet de traiter le folder 'api'comme un package python

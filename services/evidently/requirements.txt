@@ -1,0 +1,20 @@
+# Evidently AI - Monitoring ML
+evidently==0.4.33
+
+# API pour exposer les métriques
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Data manipulation
+pandas==2.2.3
+numpy==2.2.1
+
+# Database connection (pour lire les logs de prédiction)
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+
+# HTTP client (pour récupérer les données de référence)
+httpx==0.28.1
+
+# Variables d'environnement
+python-dotenv==1.0.1
