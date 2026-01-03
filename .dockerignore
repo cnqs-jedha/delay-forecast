@@ -1,11 +1,14 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+**/env/
 include/
 lib/
 bin/
@@ -18,9 +21,7 @@ pip-delete-this-directory.txt
 .dockerignore
 Dockerfile
 .env
-.pytest_cache/
-*.joblib
-*.pkl
-
-# Fichiers customs à ignorer
+**/*.joblib
+**/*.pkl
+.DS_Store
 test.db
