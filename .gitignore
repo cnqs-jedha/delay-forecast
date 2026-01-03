@@ -6,3 +6,6 @@
 *.txt
 *.parquet
 *.pyc
+*.yaml
+mlartifacts/
+mlruns/
