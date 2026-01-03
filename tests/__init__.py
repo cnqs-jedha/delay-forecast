@@ -1,0 +1,1 @@
+# Permet de traiter le folder 'tests' comme un package python

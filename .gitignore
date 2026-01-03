@@ -6,3 +6,16 @@
 *.txt
 *.parquet
 *.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+*.joblib
+*.pkl
+*.models
+test.db

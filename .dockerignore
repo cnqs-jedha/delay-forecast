@@ -1,0 +1,26 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+include/
+lib/
+bin/
+pip-log.txt
+pip-delete-this-directory.txt
+.vscode/
+.idea/
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+.env
+.pytest_cache/
+*.joblib
+*.pkl
+
+# Fichiers customs à ignorer
+test.db
