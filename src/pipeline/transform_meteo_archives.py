@@ -3,6 +3,7 @@ import json
 import holidays
 from datetime import datetime
 import os
+import uuid
 
 # Configuration du chemin vers le dossier data
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -76,6 +77,8 @@ def enrich_calendar_features(df):
         return 0
 
     df['vacances_scolaires'] = df['timestamp'].apply(est_vacances_scolaires)
+
+
     return df
 
 # FONCTION 3 - PIPELINE COMPLÈTE
@@ -97,6 +100,9 @@ def process_etl_meteo(input_path):
     # Pour renommer proprement une colonne existante :
     df = df.rename(columns={'timestamp': 'timestamp_rounded'})
 
+    # 3. Génération uuid
+    df['uuid'] = [str(uuid.uuid4()) for _ in range(len(df))]
+
     # 3. Définition du nom de fichier de sortie (.parquet)
     # On récupère le nom du fichier sans le chemin, et on change l'extension
     filename_json = os.path.basename(input_path)
@@ -113,4 +119,3 @@ def process_etl_meteo(input_path):
 if __name__ == "__main__":
     # Test manuel si on lance le script directement
     process_etl_meteo("weather_stockholm_archive.json")
-    #process_etl_meteo("weather_stockholm_forecast.json")

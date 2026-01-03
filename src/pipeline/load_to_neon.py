@@ -1,7 +1,8 @@
 import pandas as pd
 import os
 import logging
-from sqlalchemy import create_engine
+import uuid
+from sqlalchemy import create_engine, text, types  # Ajout de types ici
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -10,66 +11,61 @@ logger = logging.getLogger("neon_loader")
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Gestion des chemins
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
 def load_to_neon():
-    # Utilisation de SQLAlchemy qui est plus flexible pour la création automatique de tables
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL manquante (env var).")
+        
     engine = create_engine(DATABASE_URL)
     
-    # CONFIGURATION : On sépare tout - pas le plus recommandé, mais plus simple pour l'instant
     mapping = {
-        "stg_transport_archive": "transport_koda_2025-03-04_processed.parquet",
-        "stg_transport_realtime": "transport_rt_20251224_1119_processed.parquet",
         "stg_weather_archive": "weather_stockholm_archive_processed.parquet",
         "stg_weather_forecast": "weather_stockholm_forecast_processed.parquet"
     }
 
     for table_name, file_name in mapping.items():
-        path = os.path.join("data", file_name)
+        path = os.path.join(DATA_DIR, file_name)
+        
         if not os.path.exists(path):
-            logger.warning(f"Fichier manquant : {file_name}")
+            logger.warning(f"Fichier manquant à l'adresse : {path}")
             continue
         
         logger.info(f"Lecture de {file_name}...")
         df = pd.read_parquet(path)
+
+        # 1. Vérification/Ajout de l'UUID si absent du Parquet
+        if 'observation_uuid' not in df.columns:
+            logger.info(f"Génération des UUIDs pour {table_name}...")
+            df['observation_uuid'] = [str(uuid.uuid4()) for _ in range(len(df))]
+
+        # 2. On met l'UUID en première colonne
+        cols = ['observation_uuid'] + [c for c in df.columns if c != 'observation_uuid']
+        df = df[cols]
         
-        logger.info(f"Injection vers {table_name} ({len(df)} lignes)...")
+        logger.info(f"Injection vers {table_name} ({len(df)} lignes) avec PK...")
         
         try:
-            # method='multi' et chunksize accélèrent l'insertion pour les gros volumes
-            df.to_sql(
-                table_name, 
-                engine, 
-                if_exists="replace", # On écrase et on recrée la structure exacte du Parquet
-                index=False, 
-                chunksize=10000,
-                method='multi' 
-            )
-            logger.info(f"Table {table_name} créée et remplie avec succès.")
+            # On utilise engine.begin() pour que l'insertion et la PK soient une seule transaction
+            with engine.begin() as connection:
+                df.to_sql(
+                    table_name, 
+                    connection, 
+                    if_exists="replace", 
+                    index=False, 
+                    chunksize=10000,
+                    method='multi',
+                    dtype={"observation_uuid": types.VARCHAR(36)}
+                )
+                
+                # Ajout de la Primary Key
+                connection.execute(text(f"ALTER TABLE {table_name} ADD PRIMARY KEY (observation_uuid);"))
+                
+            logger.info(f"Table {table_name} créée (PK ok).")
         except Exception as e:
             logger.error(f"Erreur sur {table_name}: {e}")
 
 if __name__ == "__main__":
     load_to_neon()
-
-def load_parquet_to_neon(parquet_path: str, table_name: str, if_exists: str = "replace") -> None:
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL manquante (env var).")
-
-    if not os.path.exists(parquet_path):
-        raise FileNotFoundError(f"Fichier introuvable: {parquet_path}")
-
-    logger.info("Lecture parquet: %s", parquet_path)
-    df = pd.read_parquet(parquet_path)
-
-    logger.info("Connexion Neon + load vers %s (%d lignes)", table_name, len(df))
-    engine = create_engine(DATABASE_URL)
-
-    df.to_sql(
-        table_name,
-        engine,
-        if_exists=if_exists,
-        index=False,
-        chunksize=10_000,
-        method="multi",
-    )
-
-    logger.info("OK: %s chargée", table_name)

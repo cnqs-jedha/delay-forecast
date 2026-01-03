@@ -16,7 +16,7 @@ def get_dates(mode="archive"):
     today = datetime.now()
     if mode == "archive":
         # Historique : de 2023 au jour précédent
-        start = "2023-01-01"
+        start = "2025-01-01"
         end = (today - timedelta(days=1)).strftime('%Y-%m-%d')
     else:
         # Prévisions : de J+0 à J+7

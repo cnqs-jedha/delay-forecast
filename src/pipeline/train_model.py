@@ -10,7 +10,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
+from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score, precision_score, recall_score
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,13 +29,13 @@ def load_data():
         )
 
     with engine.connect() as conn:
-        #result_transport = conn.execute(text("SELECT * FROM stg_transport_archive"))
-        #transport_data = result_transport.mappings().all()  # liste de dictionnaires
+        result_transport = conn.execute(text("SELECT * FROM stg_transport_archive"))
+        transport_data = result_transport.mappings().all()  # liste de dictionnaires
 
         result_weather = conn.execute(text("SELECT * FROM stg_weather_archive"))
         weather_data = result_weather.mappings().all()  # liste de dictionnaires
 
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
+    """    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
 
     PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
     DATA_DIR = os.path.join(PROJECT_ROOT, "data")
@@ -48,12 +48,12 @@ def load_data():
         raise FileNotFoundError(f"Le fichier {json_path} est introuvable.")
 
     with open(json_path, 'r', encoding='utf-8') as f:
-        transport_data = json.load(f)
+        transport_data = json.load(f)"""
 
     df_transport = pd.DataFrame(transport_data)
     df_weather = pd.DataFrame(weather_data)
 
-    df_transport = df_transport.rename(columns={'datetime_rounded': 'timestamp_rounded'})
+    #df_transport = df_transport.rename(columns={'datetime_rounded': 'timestamp_rounded'})
 
     # Pour vérifier
     print(df_transport.columns)
@@ -132,7 +132,8 @@ def train_model():
         y_class_pred = clf.predict(X_test)
         
         # Log métriques Classif
-        mlflow.log_metric("clf_accuracy", accuracy_score(y_class_test, y_class_pred))
+        mlflow.log_metric("clf_precision", precision_score(y_class_test, y_class_pred))
+        mlflow.log_metric("clf_recall", recall_score(y_class_test, y_class_pred))
         mlflow.log_metric("clf_f1", f1_score(y_class_test, y_class_pred))
         
         # --- ÉTAPE 2 : RÉGRESSION (Combien ?) ---
