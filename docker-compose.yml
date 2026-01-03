@@ -87,9 +87,7 @@ services:
       retries: 20
 
   api:
-    build:
-      context: services/api
-      dockerfile: Dockerfile
+    image: ghcr.io/cnqs-jedha/delay-forecast:latest
     container_name: api
     env_file:
       - .env
