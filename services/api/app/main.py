@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
-from api.schemas import PredictionInput, PredictionOutput
-from api.model import model_instance
-from api.database import SessionLocal, engine, get_db
-from api import data_structure
+from .schemas import PredictionInput, PredictionOutput
+from .model import model_instance
+from .database import SessionLocal, engine, get_db
+from . import data_structure
 
 app = FastAPI(
     title="API Delay Forecast",
@@ -42,4 +42,3 @@ if __name__ == "__main__":
     # On crée les tables uniquement quand on lance l'app directement (pas pendant les tests)
     data_structure.Base.metadata.create_all(bind=engine)
     uvicorn.run(app, host="0.0.0.0", port=8000)
-s
