@@ -1,32 +1,45 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+from api.schemas import PredictionInput, PredictionOutput
+from api.model import model_instance
+from api.database import SessionLocal, engine, get_db
+from api import data_structure
 
-app = FastAPI(title="Delay Forecast API", version="0.1.0")
+app = FastAPI(
+    title="API Delay Forecast",
+    description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports parisiens en fonction de la météo et des conditions de circulation",
+    version="0.1.0"
+)
 
+@app.get("/")
+async def root():
+    return {"message": "Bienvenue sur l'API de prédiction de retard des transports Stockholm Delay Forecast"}
 
-class PredictIn(BaseModel):
-    station_id: str
-    ts: str  # ISO datetime string (ex: 2025-12-20T12:00:00Z)
+@app.post("/predict", response_model=PredictionOutput)
+async def predict(data: PredictionInput, db: Session = Depends(get_db)):
+    
+    # On transforme l'objet Pydantic en dictionnaire d'un coup
+    features = data.model_dump()
+    print(f"--- Nouvelle requête reçue ---")
+    print(f"Données d'entrée: {features}")
+    
+    # 1. Prédiction
+    prediction = model_instance.predict(features)
+    print(f"Prédiction calculée: {prediction}")
+    
+    # 2. Log en DB (plus propre avec les kwargs)
+    db_log = data_structure.PredictionLog(**features, prediction=prediction)
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    print(f"Log enregistré en base de données (ID: {db_log.id})")
+    print(f"-------------------------------")
+    
+    return PredictionOutput(prediction=prediction)
 
-    # POC: features optionnelles passées directement (simple pour démo)
-    temperature: float | None = None
-    rain_mm: float | None = None
-    wind_kmh: float | None = None
-    is_holiday: int | None = None
-    traffic_level: float | None = None
-
-
-class PredictOut(BaseModel):
-    predicted_delay_minutes: float
-    model_version: str | None = None
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.post("/predict", response_model=PredictOut)
-def predict(payload: PredictIn):
-    # Placeholder POC (à brancher ensuite sur modèle MLflow/S3)
-    return PredictOut(predicted_delay_minutes=3.5, model_version="poc")
+if __name__ == "__main__":
+    import uvicorn
+    # On crée les tables uniquement quand on lance l'app directement (pas pendant les tests)
+    data_structure.Base.metadata.create_all(bind=engine)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+s
