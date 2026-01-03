@@ -4,12 +4,12 @@ import logging
 
 # Imports des modules locaux
 from call_api_meteo import fetch_weather_data
-from src.pipeline.transform_meteo_archives import process_etl_meteo
-from src.pipeline.transform_meteo_previsions import process_etl_previsions
-from src.pipeline.call_api_transport import fetch_transport_koda, fetch_transport_realtime
-from src.pipeline.transform_transport import process_etl_transport
-from src.pipeline.transform_transport_reel import process_etl_transport_live
-from src.pipeline.load_to_neon import load_to_neon
+from transform_meteo_archives import process_etl_meteo
+from transform_meteo_previsions import process_etl_previsions
+from call_api_transport import fetch_transport_koda, fetch_transport_realtime
+from transform_transport import process_etl_transport
+from transform_transport_reel import process_etl_transport_live
+from load_to_neon import load_to_neon
 
 # Configuration du logging pour le run principal
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -17,8 +17,11 @@ logger = logging.getLogger("RUN_PIPELINE")
 
 def main():
     LAT, LON = 59.3251172, 18.0710935
-    DATE_HISTO = "2025-03-04"
+    DATE_START = "2025-03-04"
+    DATE_END = "2025-03-06"
     
+    DATE_HISTO = "2025-03-04"
+
     logger.info("Lancement du Pipeline Complet : Ingestion -> ETL -> Neon DB")
 
     # --- ÉTAPE 1 : INGESTION (API -> RAW FILES) ---

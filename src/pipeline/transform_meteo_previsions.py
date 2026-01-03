@@ -1,5 +1,5 @@
 import os
-from src.pipeline.transform_meteo_archives import process_etl_meteo
+from transform_meteo_archives import process_etl_meteo
 
 # Configuration du chemin vers le dossier data
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -49,3 +49,27 @@ def load_to_neon():
 
 if __name__ == "__main__":
     load_to_neon()
+
+def load_parquet_to_neon(parquet_path: str, table_name: str, if_exists: str = "replace") -> None:
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL manquante (env var).")
+
+    if not os.path.exists(parquet_path):
+        raise FileNotFoundError(f"Fichier introuvable: {parquet_path}")
+
+    logger.info("Lecture parquet: %s", parquet_path)
+    df = pd.read_parquet(parquet_path)
+
+    logger.info("Connexion Neon + load vers %s (%d lignes)", table_name, len(df))
+    engine = create_engine(DATABASE_URL)
+
+    df.to_sql(
+        table_name,
+        engine,
+        if_exists=if_exists,
+        index=False,
+        chunksize=10_000,
+        method="multi",
+    )
+
+    logger.info("OK: %s chargée", table_name)
