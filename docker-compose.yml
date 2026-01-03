@@ -67,7 +67,7 @@ services:
         condition: service_completed_successfully
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.14.3
+    image: ghcr.io/mlflow/mlflow:latest
     container_name: mlflow
     env_file:
       - .env
@@ -75,9 +75,9 @@ services:
       MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
       MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
     volumes:
-      - mlflow_data:/mlflow
+      - ./mlflow_data:/mlflow
     command: >
-      bash -lc "mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT}"
+      bash -lc "mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --artifacts-destination /mlflow/artifacts --serve-artifacts --allowed-hosts '*' --cors-allowed-origins '*'"
     ports:
       - "5000:5000"
     healthcheck:
@@ -95,6 +95,8 @@ services:
       - .env
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./models:/app/models
     ports:
       - "8000:8000"
     depends_on:
@@ -128,5 +130,4 @@ services:
 
 volumes:
   airflow_db_data:
-  mlflow_data:
   evidently_reports:

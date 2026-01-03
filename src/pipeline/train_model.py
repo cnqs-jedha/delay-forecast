@@ -1,4 +1,5 @@
 import os
+import joblib
 import json
 import pandas as pd
 import numpy as np
@@ -15,11 +16,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-db_url = os.getenv("DATABASE_URL")
+fdb_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
 mlflow.set_tracking_uri("http://localhost:5000")
-mlflow.set_experiment("Retards_transports_Stockholm")
+experiment_name = "Retards_transports_Stockholm_v6"
+try:
+    mlflow.create_experiment(experiment_name, artifact_location="mlflow-artifacts:/")
+except Exception:
+    pass
+mlflow.set_experiment(experiment_name)
 
 def load_data():
     """Charger les données depuis la DB"""
