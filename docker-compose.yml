@@ -88,8 +88,8 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: services/api/Dockerfile
+      context: services/api
+      dockerfile: Dockerfile
     container_name: api
     env_file:
       - .env
