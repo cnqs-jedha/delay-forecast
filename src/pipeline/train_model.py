@@ -168,6 +168,15 @@ def train_model():
         mlflow.sklearn.log_model(clf, "classifier_model")
         mlflow.sklearn.log_model(reg, "regressor_model")
         
+        # Sauvegarde locale pour l'API
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        models_dir = os.path.join(base_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+        
+        joblib.dump(clf, os.path.join(models_dir, "classifier_model.joblib"))
+        joblib.dump(reg, os.path.join(models_dir, "regressor_model.joblib"))
+        print(f"Modèles sauvegardés localement dans {models_dir}")
+        
         print("Run MLflow complétée avec succès.")
 
 if __name__ == "__main__":

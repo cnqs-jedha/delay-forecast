@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .schemas import PredictionInput, PredictionOutput
 from .model import model_instance
@@ -8,7 +8,7 @@ from .weather_utils import get_weather_features, get_calendar_features
 
 app = FastAPI(
     title="API Delay Forecast",
-    description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports parisiens en fonction de la météo et des conditions de circulation",
+    description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports de Stockholm en fonction de la météo et des conditions de circulation",
     version="0.1.0"
 )
 
@@ -30,35 +30,23 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
     
     # Complétion automatique des features manquantes
     # 1. Calendrier
-    if features.get("est_weekend") is None:
-        cal_feats = get_calendar_features(data.month, data.day, data.day_of_week)
-        features.update(cal_feats)
+    cal_feats = get_calendar_features(data.month, data.day, data.day_of_week)
+    features.update(cal_feats)
         
-    # 2. Météo
-    # On vérifie si au moins une variable météo est absente
-    meteo_needed = [
-        "temperature_2m", "precipitation", "rain", "snowfall", "weather_code",
-        "cloud_cover", "dew_point_2m", "wind_speed_10m", "wind_gusts_10m",
-        "wind_direction_10m", "soleil_leve", "risque_gel_pluie", 
-        "risque_gel_neige", "neige_fondue"
-    ]
-    
-    if any(features.get(k) is None for k in meteo_needed):
-        print("Récupération automatique des données météo...")
-        meteo_feats = get_weather_features(data.month, data.day, data.hour)
-        # On ne remplace que les valeurs qui sont None
-        for k, v in meteo_feats.items():
-            if features.get(k) is None:
-                features[k] = v
-    
-    print(f"Features finales envoyées au modèle: {features}")
+    # 2. Météo - Récupération systématique
+    print("Récupération des données météo...")
+    meteo_feats = get_weather_features(data.month, data.day, data.hour)
+    features.update(meteo_feats)
     
     # 3. Prédiction
-    prediction = model_instance.predict(features)
-    print(f"Prédiction calculée: {prediction}")
+    try:
+        prediction = model_instance.predict(features)
+        print(f"Prédiction calculée: {prediction}")
+    except Exception as e:
+        print(f"Erreur lors de la prédiction : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     
     # 4. Log en DB
-    # On crée une copie pour le log en DB car PredictionLog pourrait avoir des colonnes en plus/moins
     db_log = data_structure.PredictionLog(**features, prediction=prediction)
     db.add(db_log)
     db.commit()

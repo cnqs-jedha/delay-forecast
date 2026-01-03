@@ -10,6 +10,7 @@ class PredictionLog(Base):
     # Transport et Calendaire
     bus_nbr = Column(String)
     direction_id = Column(Integer)
+    stop_sequence = Column(Integer)
     month = Column(Integer)
     day = Column(Integer)
     hour = Column(Integer)
