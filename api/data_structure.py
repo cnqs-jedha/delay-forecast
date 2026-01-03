@@ -7,10 +7,33 @@ class PredictionLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Features
-    line = Column(Integer)
-    weather = Column(String)
+    # Transport et Calendaire
+    direction_id = Column(Integer)
+    month = Column(Integer)
+    day = Column(Integer)
+    hour = Column(Integer)
+    day_of_week = Column(Integer)
+    
+    # Météo
+    weather_code = Column(Integer)
+    temperature_2m = Column(Float)
+    precipitation = Column(Float)
+    rain = Column(Float)
+    snowfall = Column(Float)
+    wind_speed_10m = Column(Float)
+    wind_gusts_10m = Column(Float)
+    cloud_cover = Column(Integer)
+    dew_point_2m = Column(Float)
+    wind_direction_10m = Column(Integer)
+    
+    # Contexte
+    soleil_leve = Column(Integer)
+    risque_gel_pluie = Column(Integer)
+    risque_gel_neige = Column(Integer)
+    neige_fondue = Column(Integer)
+    est_weekend = Column(Integer)
+    est_jour_ferie = Column(Integer)
+    vacances_scolaires = Column(Integer)
     
     prediction = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    # etc ...
