@@ -4,6 +4,7 @@ from typing import List
 # Structure pour les données d'entrée
 class PredictionInput(BaseModel):
     # Transport & Calendaire
+    bus_nbr: str
     direction_id: int
     month: int
     day: int

@@ -8,6 +8,7 @@ class PredictionLog(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Transport et Calendaire
+    bus_nbr = Column(String)
     direction_id = Column(Integer)
     month = Column(Integer)
     day = Column(Integer)

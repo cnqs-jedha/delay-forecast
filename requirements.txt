@@ -6,6 +6,7 @@ python-dotenv
 
 # ML 
 scikit-learn
+mlflow
 joblib
 pydantic
 numpy
