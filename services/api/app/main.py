@@ -35,12 +35,8 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
         
     # 2. Météo - Récupération systématique
     print("Récupération des données météo...")
-    try:
-        meteo_feats = get_weather_features(data.month, data.day, data.hour)
-        features.update(meteo_feats)
-    except Exception as e:
-        print(f"Erreur météo : {e}")
-        raise HTTPException(status_code=503, detail=str(e))
+    meteo_feats = get_weather_features(data.month, data.day, data.hour)
+    features.update(meteo_feats)
     
     # 3. Prédiction
     try:

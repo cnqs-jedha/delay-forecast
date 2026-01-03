@@ -77,8 +77,13 @@ def get_weather_features(month: int, day: int, hour: int):
         return res
     except Exception as e:
         print(f"Erreur API Météo: {e}")
-        # On propage l'erreur pour que l'API principale la gère
-        raise Exception(f"Impossible de récupérer les données météo : {str(e)}")
+        # Fallback valeurs par défaut neutres
+        return {
+            "temperature_2m": 10.0, "precipitation": 0.0, "rain": 0.0, "snowfall": 0.0,
+            "weather_code": 0, "cloud_cover": 0, "dew_point_2m": 5.0, "wind_speed_10m": 5.0,
+            "wind_gusts_10m": 10.0, "wind_direction_10m": 180, "soleil_leve": 1,
+            "risque_gel_pluie": 0, "risque_gel_neige": 0, "neige_fondue": 0
+        }
 
 def get_calendar_features(month: int, day: int, day_of_week: int):
     """

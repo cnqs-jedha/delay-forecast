@@ -14,6 +14,7 @@ from utils.read_data_transport import read_koda_history_day_stream, read_koda_re
 from utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
 from utils.filter_route_transport import filter_by_bus_route
 from utils.transform_data_transport import transform_S3_to_neon
+from utils.send_to_s3_transport import send_to_S3
 from load_to_neon import load_parquet_to_neon
 
 logging.basicConfig(
@@ -22,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2025-01-13"
-DATE_END = "2025-01-19"
+DATE_BEGIN = "2025-01-06"
+DATE_END = "2025-01-12"
 
 start = datetime.strptime(DATE_BEGIN, "%Y-%m-%d")
 end = datetime.strptime(DATE_END, "%Y-%m-%d")
@@ -83,23 +84,17 @@ while current <= end:
 
 logger.info(datas[:20])
 
-################
-##ENVOYER A S3## TODO
-################
-#Regarder pour faire un fichier par semaine (ceci est l'envoi à S3)
-with open(f"data/S3/history_transport_{DATE_BEGIN}-{DATE_END}.json", "w", encoding="utf-8") as f:
-    json.dump(datas, f, ensure_ascii=False, indent=2)
+file_name = f"history_transport_{DATE_BEGIN}-{DATE_END}"
+send_to_S3(datas, file_name)
 
-logger.info("c'est enregistré")
+logger.info("c'est envoyé")
 
-# VERIFIER QU4IL ENVOIE TOUTES LES DONNEES EN DB !!!!
 # Transform data to database
-json_name = f"history_transport_{DATE_BEGIN}-{DATE_END}.json"
-datas_S3 = transform_S3_to_neon(json_name)
+datas_S3 = transform_S3_to_neon(datas)
 
 logger.info(datas_S3[:20])
 
-#LOAD TO NEON
+# #LOAD TO NEON
 logger = logging.getLogger("NEON LOADER")
 
 load_parquet_to_neon("stg_transport_archive", datas_S3)
