@@ -1,0 +1,49 @@
+import os
+import sys
+import logging
+
+# Imports des modules locaux
+from pipeline.weather.utils.call_api_meteo import fetch_weather_data
+from pipeline.weather.utils.transform_meteo_archives import process_etl_meteo
+from pipeline.weather.utils.transform_meteo_previsions import process_etl_previsions
+from pipeline.weather.utils.load_to_neon import load_to_neon
+from pipeline.weather.utils.s3_weather import send_to_S3
+from pipeline.weather.utils.load_to_neon_weather import load_parquet_to_neon
+
+# Configuration du logging pour le run principal
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logger = logging.getLogger("RUN_PIPELINE")
+
+def main():
+    LAT, LON = 59.3251172, 18.0710935
+
+    logger.info("Lancement du Pipeline Complet : Ingestion -> ETL -> Neon DB")
+
+    # --- ÉTAPE 1 : INGESTION (API -> RAW FILES) ---
+    logger.info("--- 1. Ingestion des données (Météo & Transport) ---")
+
+    weather_forecast_name = "weather_stockholm_forecast"
+    
+    data_weather_forecast = fetch_weather_data(LAT, LON, mode="forecast")
+
+    # Envoyer à S3
+    send_to_S3(data_weather_forecast, weather_forecast_name)
+
+    # --- ÉTAPE 2 : ETL / TRANSFORMATION (RAW -> PARQUET) ---
+    logger.info("--- 2. Transformation des données (ETL) ---")
+
+    data_forecast = process_etl_meteo(data_weather_forecast)
+
+    # --- ÉTAPE 3 : CHARGEMENT VERS NEON DB ---
+    logger.info("--- 3. Chargement des fichiers Processed vers Neon DB ---")
+    
+    try:
+        load_parquet_to_neon("stg_weather_forecast", data_forecast)
+        logger.info("Pipeline terminé avec succès. Les données sont dans Neon DB.")
+    except Exception as e:
+        logger.error(f"Erreur lors du chargement Neon : {e}")
+
+    logger.info("\nFin du run.")
+
+if __name__ == "__main__":
+    main()

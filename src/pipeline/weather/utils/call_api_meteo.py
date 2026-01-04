@@ -15,8 +15,8 @@ def get_dates(mode="archive"):
     """Calcule les dates de début et de fin selon le mode choisi."""
     today = datetime.now()
     if mode == "archive":
-        # Historique : de 2023 au jour précédent
-        start = "2023-01-01"
+        # Historique : de janvier 2025 jusque hier
+        start = "2025-01-01"
         end = (today - timedelta(days=1)).strftime('%Y-%m-%d')
     else:
         # Prévisions : de J+0 à J+7
@@ -24,7 +24,7 @@ def get_dates(mode="archive"):
         end = (today + timedelta(days=7)).strftime('%Y-%m-%d')
     return start, end
 
-def fetch_weather_data(latitude, longitude, filename, mode="archive"):
+def fetch_weather_data(latitude, longitude, mode="archive"):
     """Récupère les données météo et les enregistre en JSON localement."""
     
     start_d, end_d = get_dates(mode)
@@ -65,14 +65,7 @@ def fetch_weather_data(latitude, longitude, filename, mode="archive"):
         response.raise_for_status()
         raw_data = response.json()
 
-        # Construction du chemin de sortie
-        output_path = os.path.join(DATA_DIR, filename)
-
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(raw_data, f, ensure_ascii=False, indent=4)
-            
-        print(f"Données {mode} enregistrées avec succès : {output_path}")
-        return output_path
+        return raw_data
 
     except requests.exceptions.RequestException as e:
         print(f"Erreur lors de la requête API : {e}")

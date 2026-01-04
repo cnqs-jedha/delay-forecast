@@ -9,19 +9,21 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 # FONCTION 1 - TRANSFORMATION MÉTÉO
-def etl_weather_transformation(json_filename):
+def etl_weather_transformation(json_file):
     """
     Transforme le JSON brut Open-Meteo en DataFrame aplati 
     avec logique Sunrise/Sunset et risques météo.
     """
 # Construction du chemin complet vers le fichier dans /data
-    json_path = os.path.join(DATA_DIR, json_filename)
+    # json_path = os.path.join(DATA_DIR, json_filename)
     
-    if not os.path.exists(json_path):
-        raise FileNotFoundError(f"Le fichier {json_path} est introuvable.")
+    # if not os.path.exists(json_path):
+    #     raise FileNotFoundError(f"Le fichier {json_path} est introuvable.")
 
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    # with open(json_path, 'r', encoding='utf-8') as f:
+    #     data = json.load(f)
+
+    data = json_file
 
     # Aplatissement horaire
     df_h = pd.DataFrame(data['hourly'])
@@ -64,8 +66,8 @@ def enrich_calendar_features(df):
     df['day_of_week'] = df['timestamp'].dt.dayofweek
     df['est_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
     df['est_jour_ferie'] = df['timestamp'].dt.date.apply(lambda x: 1 if x in sweden_holidays else 0)
-     
-     # Vacances scolaires suédoises (silmplification)
+    
+    # Vacances scolaires suédoises (silmplification)
     def est_vacances_scolaires(date):
         week = date.isocalendar()[1]
         month, day = date.month, date.day
@@ -100,14 +102,14 @@ def process_etl_meteo(input_path):
 
     # 3. Définition du nom de fichier de sortie (.parquet)
     # On récupère le nom du fichier sans le chemin, et on change l'extension
-    filename_json = os.path.basename(input_path)
-    filename_parquet = filename_json.replace(".json", "_processed.parquet")
-    output_path = os.path.join(DATA_DIR, filename_parquet)
+    # filename_json = os.path.basename(input_path)
+    # filename_parquet = filename_json.replace(".json", "_processed.parquet")
+    # output_path = os.path.join(DATA_DIR, filename_parquet)
 
     # 4. Sauvegarde
-    df.to_parquet(output_path, index=False)
-    print(f"Fichier transformé sauvegardé : {output_path}")
-    print(df.columns.tolist())
+    # df.to_parquet(output_path, index=False)
+    # print(f"Fichier transformé sauvegardé : {output_path}")
+    # print(df.columns.tolist())
     return df
 
 # --- EXÉCUTION ---

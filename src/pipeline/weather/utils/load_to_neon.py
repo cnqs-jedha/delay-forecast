@@ -49,19 +49,3 @@ def load_to_neon():
 
 if __name__ == "__main__":
     load_to_neon()
-
-def load_parquet_to_neon(table_name, data_array) -> None:
-    engine = create_engine(DATABASE_URL)
-
-    df = pd.DataFrame(data_array)
-
-    df.to_sql(
-        table_name,
-        engine,
-        if_exists="append",
-        index=False,
-        method="multi",
-        chunksize=10_000,
-    )
-
-    logger.info("OK: %s chargée", table_name)

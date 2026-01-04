@@ -4,7 +4,7 @@ from collections import defaultdict
 import random
 import gc
 
-from utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
+from pipeline.transport.utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
 
 def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2):
     """

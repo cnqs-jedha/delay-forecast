@@ -9,13 +9,13 @@ import os
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
-from utils.call_api_transport import call_koda_history_api, call_koda_reference_api
-from utils.read_data_transport import read_koda_history_day_stream, read_koda_reference_data
-from utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
-from utils.filter_route_transport import filter_by_bus_route
-from utils.transform_data_transport import transform_S3_to_neon
-from utils.send_to_s3_transport import send_to_S3
-from load_to_neon import load_parquet_to_neon
+from pipeline.transport.utils.call_api_transport import call_koda_history_api, call_koda_reference_api
+from pipeline.transport.utils.read_data_transport import read_koda_history_day_stream, read_koda_reference_data
+from pipeline.transport.utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
+from pipeline.transport.utils.filter_route_transport import filter_by_bus_route
+from pipeline.transport.utils.transform_data_transport import transform_S3_to_neon
+from pipeline.transport.utils.s3_transport import send_to_S3
+from pipeline.transport.utils.load_to_neon_transport import load_parquet_to_neon
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2025-01-06"
-DATE_END = "2025-01-12"
+DATE_BEGIN = "2025-06-16"
+DATE_END = "2025-06-22"
 
 start = datetime.strptime(DATE_BEGIN, "%Y-%m-%d")
 end = datetime.strptime(DATE_END, "%Y-%m-%d")
@@ -41,6 +41,11 @@ while current <= end:
     max_bus_per_hour = 2
 
     current_string = current.strftime("%Y-%m-%d")
+
+    r_history = r_reference = None
+    history_entities = bad_files = None
+    reference_routes = reference_trips = None
+    filtered_data = None
 
     # New day
     logger.info(current_string)
