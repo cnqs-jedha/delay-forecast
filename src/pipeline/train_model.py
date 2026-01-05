@@ -1,183 +1,247 @@
 import os
-import joblib
-import json
-import pandas as pd
 import numpy as np
+import pandas as pd
 import mlflow
 import mlflow.sklearn
 from sqlalchemy import create_engine, text
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, f1_score
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 from dotenv import load_dotenv
 
 load_dotenv()
 
-fdb_url = os.getenv("DATABASE_URL")
+# --- CONFIGURATION ---
+db_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
 mlflow.set_tracking_uri("http://localhost:5000")
-experiment_name = "Retards_transports_Stockholm_v6"
+experiment_name = "Retards_transports_Stockholm_v7"
 try:
-    mlflow.create_experiment(experiment_name, artifact_location="mlflow-artifacts:/")
+    mlflow.create_experiment(experiment_name)
 except Exception:
     pass
 mlflow.set_experiment(experiment_name)
 
 def load_data():
-    """Charger les données depuis la DB"""
-    engine = create_engine(
-    db_url,
-    pool_pre_ping=True,
-        )
+    """Charger les données depuis la DB et effectuer le merge initial"""
+    engine = create_engine(db_url, pool_pre_ping=True)
 
     with engine.connect() as conn:
-        #result_transport = conn.execute(text("SELECT * FROM stg_transport_archive"))
-        #transport_data = result_transport.mappings().all()  # liste de dictionnaires
+        result_transport = conn.execute(text("SELECT * FROM stg_transport_archive"))
+        df_transport = pd.DataFrame(result_transport.mappings().all())
 
         result_weather = conn.execute(text("SELECT * FROM stg_weather_archive"))
-        weather_data = result_weather.mappings().all()  # liste de dictionnaires
+        df_weather = pd.DataFrame(result_weather.mappings().all())
 
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
+    # Homogénéisation du nom de la colonne de jointure
+    if 'datetime_rounded' in df_transport.columns:
+        df_transport = df_transport.rename(columns={'datetime_rounded': 'timestamp_rounded'})
 
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-    DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-    json_path = os.path.join(DATA_DIR, "transport_koda_one_bus_3_days.json")
-    #json_path = os.path.join(DATA_DIR, "transport_koda_one_bus_any_days.json")
-
-    if not os.path.exists(json_path):
-        # Petit conseil : affiche BASE_DIR pour déboguer le chemin
-        print(f"Dossier actuel de recherche : {DATA_DIR}")
-        raise FileNotFoundError(f"Le fichier {json_path} est introuvable.")
-
-    with open(json_path, 'r', encoding='utf-8') as f:
-        transport_data = json.load(f)
-
-    df_transport = pd.DataFrame(transport_data)
-    df_weather = pd.DataFrame(weather_data)
-
-    df_transport = df_transport.rename(columns={'datetime_rounded': 'timestamp_rounded'})
-
-    # Pour vérifier
-    print(df_transport.columns)
-    df_transport.describe(include='all')
-
-    # 1. Convertir en datetime ET forcer l'UTC pour les deux --> à corriger dans le process etl /!\
+    # Conversion en datetime pour assurer la jointure
     df_transport['timestamp_rounded'] = pd.to_datetime(df_transport['timestamp_rounded'], utc=True)
     df_weather['timestamp_rounded'] = pd.to_datetime(df_weather['timestamp_rounded'], utc=True)
 
-    # 2. Maintenant le merge fonctionnera sans erreur
-    df_merged = pd.merge(
-        df_transport,
-        df_weather,
-        on="timestamp_rounded",
-        how="left"
+    df = pd.merge(df_transport, df_weather, on="timestamp_rounded", how="left")
+
+    # Suppression immédiate des IDs et colonnes inutiles
+    cols_to_drop = ["id", "observation_uuid", "entity_id", "route_id_static", "timestamp", 
+                    "timestamp_dt", "trip_id", "route_id", "year", "uv_index", 
+                    "shortwave_radiation", "timestamp_rounded", 'arrival_delay']
+    
+    df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
+    
+    print(f"\nDonnées chargées : {len(df)} lignes")
+    print(f"Colonnes disponibles : {df.columns.tolist()}")
+    
+    return df
+
+def preprocess(df):
+    """Prépare les features numériques et catégorielles"""
+    
+    # 1. Vérifier les colonnes disponibles
+    print("\n ANALYSE DES COLONNES")
+    print("=" * 60)
+    
+    # 2. Définition de la cible (Y)
+    if 'departure_delay' not in df.columns:
+        raise ValueError(" Colonne 'departure_delay' introuvable !")
+    
+    y = df['departure_delay'].clip(lower=0)
+    print(f"Cible (y) : {len(y)} observations, moyenne = {y.mean():.1f}s")
+    
+    # 3. Préparation de X
+    X = df.drop(columns=['departure_delay', 'arrival_delay'], errors='ignore')
+    
+    # 4. IDENTIFICATION CORRECTE DES CATÉGORIELLES
+    # Liste des colonnes qui DOIVENT être catégorielles (même si int)
+    categorical_cols = []
+    
+    # a) Vérifier bus_nbr
+    if 'bus_nbr' in X.columns:
+        categorical_cols.append('bus_nbr')
+        print(f"bus_nbr trouvé : {X['bus_nbr'].nunique()} valeurs uniques")
+    
+    #  Vérifier direction_id  
+    if 'direction_id' in X.columns:
+        categorical_cols.append('direction_id')
+        print(f"direction_id trouvé : {X['direction_id'].nunique()} valeurs uniques")
+    
+    # Weather code : le forcer en catégoriel
+    if 'weather_code' in X.columns:
+        categorical_cols.append('weather_code')
+        # Convertir explicitement en string pour forcer le traitement catégoriel
+        X['weather_code'] = X['weather_code'].astype(str)
+        print(f"weather_code trouvé : {X['weather_code'].nunique()} codes uniques")
+        print(f"Codes présents : {sorted(X['weather_code'].unique())}")
+    
+    # Feature Engineering Cyclique pour l'heure
+    if 'hour' in X.columns:
+        X['hour_sin'] = np.sin(2 * np.pi * X['hour'] / 24)
+        X['hour_cos'] = np.cos(2 * np.pi * X['hour'] / 24)
+        print(f"Features cycliques créées pour 'hour'")
+    
+    # Jour de la semaine cyclique
+    if 'day_of_week' in X.columns:
+        X['day_sin'] = np.sin(2 * np.pi * X['day_of_week'] / 7)
+        X['day_cos'] = np.cos(2 * np.pi * X['day_of_week'] / 7)
+        print(f"Features cycliques créées pour 'day_of_week'")
+    
+    # Mois cyclique
+    if 'month' in X.columns:
+        X['month_sin'] = np.sin(2 * np.pi * X['month'] / 12)
+        X['month_cos'] = np.cos(2 * np.pi * X['month'] / 12)
+        print(f"Features cycliques créées pour 'month'")
+    
+    #  One-Hot Encoding des catégorielles
+    if categorical_cols:
+        print(f"\n One-Hot Encoding de : {categorical_cols}")
+        X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
+        print(f"Encoding terminé")
+    else:
+        print("\n Aucune colonne catégorielle détectée !")
+    
+    # 9. Nettoyage final : ne garder QUE les numériques
+    before_cleanup = X.shape[1]
+    X = X.select_dtypes(include=[np.number])
+    after_cleanup = X.shape[1]
+    
+    if before_cleanup > after_cleanup:
+        print(f"\n{before_cleanup - after_cleanup} colonnes non-numériques supprimées")
+    
+    # 10. Vérification de NaN
+    nan_cols = X.columns[X.isna().any()].tolist()
+    if nan_cols:
+        print(f"\nColonnes avec NaN : {nan_cols}")
+        print(f"   → Remplissage avec 0")
+        X = X.fillna(0)
+    
+    print(f"\nFeatures finales : {X.shape[1]} colonnes")
+    print(f"   {X.columns.tolist()}")
+    
+    return X, y
+
+def train_quantile_models():
+
+    # --- ETAPE 1 : CHARGEMENT ET PREPROCESS ---
+    print("\n" + "="*80)
+    print("ENTRAÎNEMENT DES MODÈLES DE PRÉDICTION DE RETARDS")
+    print("="*80)
+    
+    df_raw = load_data()
+    X, y = preprocess(df_raw)
+
+    # Split temporel (shuffle=False pour respecter la chronologie)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, shuffle=False, random_state=42
     )
-
-    # 3. Suppression des colonnes
-    cols_to_drop = ["entity_id", "route_id_static", "timestamp", "timestamp_dt", 
-                    "trip_id", "route_id", "year", "uv_index", "shortwave_radiation"]
-
-    df_merged = df_merged.drop(columns=cols_to_drop, errors='ignore')
-
-    df_merged.sample(20)
-
-    return df_merged
-
-def build_preprocessor(numeric_cols, categorical_cols):
-    """Crée le pipeline de nettoyage des données"""
-    return ColumnTransformer(
-        transformers=[
-            ('num', StandardScaler(), numeric_cols),
-            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-        ]
-    )
-
-def train_model():
-    df = load_data()
     
-    # --- PRÉPARATION DES CIBLES ---
-    # Seuil de retard : 120 secondes (2 min)
-    df['is_delayed'] = (df['arrival_delay'] > 120).astype(int)
+    print(f"\n Split des données :")
+    print(f"   Train : {len(X_train)} observations")
+    print(f"   Test  : {len(X_test)} observations")
+    print(f"   Ratio : {len(X_test)/len(X)*100:.1f}%")
+
+    quantiles = [0.5, 0.8, 0.9]
+    names = ["P50_Median", "P80_Pessimist", "P90_Extreme"]
     
-    target_class = 'is_delayed'
-    target_reg = 'arrival_delay'
+    print(f"\nEntraînement de {len(quantiles)} modèles quantiles")
+    print("-" * 80)
     
-    # Définition des colonnes
-    categorical_cols = ['bus_nbr', 'direction_id', 'day_of_week', 'month', 'hour', 'weather_code']
-    # On exclut les targets et les délais de départ (pour la prédiction pure)
-    exclude = [target_class, target_reg, 'departure_delay', 'timestamp_rounded']
-    numeric_cols = [c for c in df.select_dtypes(include=['number']).columns if c not in categorical_cols + exclude]
+    with mlflow.start_run(run_name="quantile_bundle_v2_fixed"):
+        # Log des paramètres globaux
+        mlflow.log_param("n_estimators", 300)
+        mlflow.log_param("max_depth", 5)
+        mlflow.log_param("learning_rate", 0.05)
+        mlflow.log_param("n_features", X.shape[1])
+        mlflow.log_param("n_train", len(X_train))
+        mlflow.log_param("n_test", len(X_test))
+        
+        # Log de l'exemple d'input pour signature
+        input_example = X_train.head(1)
 
-    X = df.drop(columns=exclude)
-    y_class = df[target_class]
-    y_reg = df[target_reg]
+        for alpha, name in zip(quantiles, names):
+            print(f"\n Entraînement du modèle {name} (alpha={alpha})...")
+            
+            model = GradientBoostingRegressor(
+                loss="quantile",
+                alpha=alpha,
+                n_estimators=300,
+                max_depth=5,
+                learning_rate=0.05,
+                random_state=42
+            )
+            
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
 
-    # Split
-    X_train, X_test, y_class_train, y_class_test = train_test_split(X, y_class, test_size=0.2, random_state=42)
-    _, _, y_reg_train, y_reg_test = train_test_split(X, y_reg, test_size=0.2, random_state=42)
+            # Calcul des métriques
+            mae = mean_absolute_error(y_test, preds)
+            rmse = root_mean_squared_error(y_test, preds)
+            r2 = r2_score(y_test, preds)
+            reliability = (y_test <= preds).mean()  # % de fois où prédiction > réel
+            
+            # Métriques additionnelles
+            mean_pred = preds.mean()
+            mean_actual = y_test.mean()
+            
+            # Log MLflow
+            mlflow.log_metric(f"{name}_mae", mae)
+            mlflow.log_metric(f"{name}_mae_minutes", mae/60)
+            mlflow.log_metric(f"{name}_rmse", rmse)
+            mlflow.log_metric(f"{name}_r2", r2)
+            mlflow.log_metric(f"{name}_reliability", reliability)
+            mlflow.log_metric(f"{name}_mean_pred", mean_pred)
+            
+            # Log du modèle avec signature et exemple
+            mlflow.sklearn.log_model(
+                model, 
+                name,  # Utiliser 'name' au lieu de 'artifact_path'
+                input_example=input_example
+            )
 
-    with mlflow.start_run(run_name="modele_combine_clf_reg_v1"):
-        # 1. LOG DES PARAMÈTRES
-        mlflow.log_param("n_days", len(df['timestamp_rounded'].dt.date.unique()))
-        mlflow.log_param("features", X.columns.tolist())
+            print(f" MAE       : {mae:.2f}s ({mae/60:.2f} min)")
+            print(f" RMSE      : {rmse:.2f}s ({rmse/60:.2f} min)")
+            print(f" R²        : {r2:.3f}")
+            print(f" Fiabilité : {reliability:.1%}")
+            print(f" Prédiction moyenne : {mean_pred:.1f}s")
+            print(f" Retard moyen réel  : {mean_actual:.1f}s")
+            
+        # Feature importance du dernier modèle (P90)
+        feature_importance = pd.DataFrame({
+            'feature': X.columns,
+            'importance': model.feature_importances_
+        }).sort_values('importance', ascending=False)
         
-        # 2. CONSTRUCTION DU PRÉPROCESSEUR
-        preprocessor = build_preprocessor(numeric_cols, categorical_cols)
+        print("\nTop 10 features les plus importantes (P90) :")
+        print(feature_importance.head(10).to_string(index=False))
         
-        # --- ÉTAPE 1 : CLASSIFICATION (Y aura-t-il un retard ?) ---
-        clf = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('classifier', RandomForestClassifier(n_estimators=100, random_state=42))
-        ])
-        
-        clf.fit(X_train, y_class_train)
-        y_class_pred = clf.predict(X_test)
-        
-        # Log métriques Classif
-        mlflow.log_metric("clf_accuracy", accuracy_score(y_class_test, y_class_pred))
-        mlflow.log_metric("clf_f1", f1_score(y_class_test, y_class_pred))
-        
-        # --- ÉTAPE 2 : RÉGRESSION (Combien ?) ---
-        # On n'entraîne que sur les lignes où il y a réellement un retard
-        mask_train = y_class_train == 1
-        X_reg_train = X_train[mask_train]
-        y_reg_train_filtered = y_reg_train[mask_train]
-        
-        reg = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
-        ])
-        
-        reg.fit(X_reg_train, y_reg_train_filtered)
-        
-        # Evaluation Régression (sur les vrais positifs du test)
-        mask_test = y_class_test == 1
-        X_reg_test = X_test[mask_test]
-        y_reg_test_filtered = y_reg_test[mask_test]
-        
-        if len(X_reg_test) > 0:
-            y_reg_pred = reg.predict(X_reg_test)
-            mlflow.log_metric("reg_rmse", np.sqrt(mean_squared_error(y_reg_test_filtered, y_reg_pred)))
-            mlflow.log_metric("reg_r2", r2_score(y_reg_test_filtered, y_reg_pred))
+        # Sauvegarder comme artifact
+        feature_importance.to_csv("feature_importance.csv", index=False)
+        mlflow.log_artifact("feature_importance.csv")
 
-        # 3. SAUVEGARDE DES MODÈLES
-        mlflow.sklearn.log_model(clf, "classifier_model")
-        mlflow.sklearn.log_model(reg, "regressor_model")
-        
-        # Sauvegarde locale pour l'API
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        models_dir = os.path.join(base_dir, "models")
-        os.makedirs(models_dir, exist_ok=True)
-        
-        joblib.dump(clf, os.path.join(models_dir, "classifier_model.joblib"))
-        joblib.dump(reg, os.path.join(models_dir, "regressor_model.joblib"))
-        print(f"Modèles sauvegardés localement dans {models_dir}")
-        
-        print("Run MLflow complétée avec succès.")
+    print("\n" + "="*80)
+    print("ENTRAÎNEMENT TERMINÉ")
+    print("="*80)
 
 if __name__ == "__main__":
-    train_model()
+    train_quantile_models()

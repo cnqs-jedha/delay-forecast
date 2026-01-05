@@ -13,3 +13,6 @@ botocore>=1.31.0 # AWS Core SDK
 pytz>=2024.1 # Gestion des fuseaux horaires
 psycopg2 # PostgreSQL adapter pour Python
 sqlalchemy>=2.0.0 # ORM pour la base de données
+sklearn
+mlflow
+uuid
