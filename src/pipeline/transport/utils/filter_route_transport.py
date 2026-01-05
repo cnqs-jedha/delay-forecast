@@ -16,16 +16,25 @@ def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2
     :param trip_bus_chosed: la liste des ids de trips choisis, via les route ids
     :param bus_per_hour: Nombre de bus par heure conservé dans les datas
     """
+    
     final_data = []
     loop_data = []
     route_ids_chosed = []
     trip_bus_chosed = []
     
+    if r_routes is None or r_trips is None:
+        print("r_route probleme")
+        raise ValueError(f"reference_routes/trips is None (routes={type(r_routes)}, trips={type(r_trips)})")
+
+    if history_data is None:
+        print("history data probleme")
+        raise ValueError("history_data is None")
+    
     routes_bus_chosed = [
             r for r in r_routes
             if str(r.get("route_short_name")) == bus_nbr
         ]
-
+    print(routes_bus_chosed)
     #Récupère tous les route_id de bus choisis, un ou plusieurs
     for route in routes_bus_chosed:
         route_ids_chosed.append(route['route_id'])
@@ -48,7 +57,7 @@ def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2
         and getattr(e.trip_update, "trip", None)
         and e.trip_update.trip.trip_id in valid_trip_ids
     ]
-
+    # print(filtered_history[:2])
     for e in filtered_history:
         final_data.extend(flatten_history_entity_koda(e, ref_trips_choosed_corr))
 
