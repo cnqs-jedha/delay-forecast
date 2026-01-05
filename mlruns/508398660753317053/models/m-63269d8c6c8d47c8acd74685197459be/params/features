@@ -1,0 +1,1 @@
+['direction_id', 'stop_sequence', 'hour', 'bus_nbr', 'cloud_cover', 'day_of_week', 'dew_point_2m', 'est_jour_ferie', 'est_weekend', 'month', 'neige_fondue', 'precipitation', 'rain', 'risque_gel_neige', 'risque_gel_pluie', 'snowfall', 'soleil_leve', 'temperature_2m', 'vacances_scolaires', 'weather_code', 'wind_direction_10m', 'wind_gusts_10m', 'wind_speed_10m']

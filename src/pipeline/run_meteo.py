@@ -6,14 +6,7 @@ import logging
 from src.pipeline.weather.utils.call_api_meteo import fetch_weather_data
 from transform_meteo_archives import process_etl_meteo
 from transform_meteo_previsions import process_etl_previsions
-<<<<<<< HEAD:src/pipeline/run.py
-from call_api_transport import fetch_transport_koda, fetch_transport_realtime
-from transform_transport import process_etl_transport
-from transform_transport_reel import process_etl_transport_live
-from src.pipeline.weather.utils.load_to_neon import load_to_neon
-=======
 from load_to_neon import load_to_neon
->>>>>>> origin/fetch-api:src/pipeline/run_meteo.py
 
 # Configuration du logging pour le run principal
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
