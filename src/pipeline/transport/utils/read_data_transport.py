@@ -171,39 +171,48 @@ def read_koda_history_day_stream(request, items_by_batch=400):
 
 
 # Lit les fichier de référence .txt
+# def read_koda_reference_data(request, file_name):
+#     data = request.content
+
+#     def detect_archive_type(data: bytes) -> str:
+#         if data.startswith(b"7z\xbc\xaf'\x1c"):
+#             return "7z"
+#         if data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06") or data.startswith(b"PK\x07\x08"):
+#             return "zip"
+#         return "unknown"
+
+#     kind = detect_archive_type(data)
+#     archive_bytes = io.BytesIO(data)
+
+#     if kind == "zip":
+#         with zipfile.ZipFile(archive_bytes, "r") as z:
+#             with z.open(f"{file_name}.txt") as f:
+#                 text = io.TextIOWrapper(f, encoding="utf-8")
+#                 return list(csv.DictReader(text))
+
+#     if kind == "7z":
+#         # 7z: py7zr ne donne pas open() direct comme zipfile, on extrait vers mémoire ou temp
+#         with py7zr.SevenZipFile(archive_bytes, mode="r") as z:
+#             target = f"{file_name}.txt"
+#             names = z.getnames()
+#             # si chemin différent dans l'archive, on essaie de retrouver le bon
+#             matches = [n for n in names if n.endswith(target)]
+#             if not matches:
+#                 raise FileNotFoundError(f"{target} introuvable dans l'archive 7z")
+#             chosen = matches[0]
+
+#             extracted = z.read([chosen])  # returns dict {name: bio}
+#             bio = extracted[chosen]
+#             text = io.TextIOWrapper(bio, encoding="utf-8")
+#             return list(csv.DictReader(text))
+
+#     raise ValueError(f"Archive type inconnu pour reference data: sig={data[:16]!r}")
+
 def read_koda_reference_data(request, file_name):
-    data = request.content
+    archive_bytes = io.BytesIO(request.content)
 
-    def detect_archive_type(data: bytes) -> str:
-        if data.startswith(b"7z\xbc\xaf'\x1c"):
-            return "7z"
-        if data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06") or data.startswith(b"PK\x07\x08"):
-            return "zip"
-        return "unknown"
-
-    kind = detect_archive_type(data)
-    archive_bytes = io.BytesIO(data)
-
-    if kind == "zip":
-        with zipfile.ZipFile(archive_bytes, "r") as z:
-            with z.open(f"{file_name}.txt") as f:
-                text = io.TextIOWrapper(f, encoding="utf-8")
-                return list(csv.DictReader(text))
-
-    if kind == "7z":
-        # 7z: py7zr ne donne pas open() direct comme zipfile, on extrait vers mémoire ou temp
-        with py7zr.SevenZipFile(archive_bytes, mode="r") as z:
-            target = f"{file_name}.txt"
-            names = z.getnames()
-            # si chemin différent dans l'archive, on essaie de retrouver le bon
-            matches = [n for n in names if n.endswith(target)]
-            if not matches:
-                raise FileNotFoundError(f"{target} introuvable dans l'archive 7z")
-            chosen = matches[0]
-
-            extracted = z.read([chosen])  # returns dict {name: bio}
-            bio = extracted[chosen]
-            text = io.TextIOWrapper(bio, encoding="utf-8")
-            return list(csv.DictReader(text))
-
-    raise ValueError(f"Archive type inconnu pour reference data: sig={data[:16]!r}")
+    with zipfile.ZipFile(archive_bytes, "r") as z:
+        with z.open(f"{file_name}.txt") as f:
+            text = io.TextIOWrapper(f, encoding="utf-8")
+            reader = csv.DictReader(text)
+            return list(reader)
