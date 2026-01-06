@@ -67,6 +67,12 @@ def preprocess(df):
     if 'departure_delay' not in df.columns:
         raise ValueError(" Colonne 'departure_delay' introuvable !")
     
+    # NETTOYER LES NaN DANS Y AVANT clip()
+    print(f"NaN dans departure_delay AVANT nettoyage : {df['departure_delay'].isna().sum()}")
+    
+    # Supprimer les lignes avec NaN dans la cible
+    df = df[df['departure_delay'].notna()].copy()
+    
     y = df['departure_delay'].clip(lower=0)
     print(f"Cible (y) : {len(y)} observations, moyenne = {y.mean():.1f}s")
     
