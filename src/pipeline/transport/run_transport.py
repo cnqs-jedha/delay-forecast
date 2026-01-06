@@ -23,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2024-12-09"
-DATE_END = "2024-12-15"
+DATE_BEGIN = "2024-04-29"
+DATE_END = "2024-05-05"
 
 start = datetime.strptime(DATE_BEGIN, "%Y-%m-%d")
 end = datetime.strptime(DATE_END, "%Y-%m-%d")

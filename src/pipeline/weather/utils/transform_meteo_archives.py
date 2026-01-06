@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import uuid
 
+
 # Configuration du chemin vers le dossier data
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -61,9 +62,10 @@ def enrich_calendar_features(df):
     sweden_holidays = holidays.CountryHoliday('SE')
 
     # Bases (année, mois, jour de la semaine, weekend, jour férié)
+    df["observation_uuid"] = [str(uuid.uuid4()) for _ in range(len(df))]
     df['year'] = df['timestamp'].dt.year
     df['month'] = df['timestamp'].dt.month
-    df['day'] = df['timestamp'].dt.day
+    # df['day'] = df['timestamp'].dt.day
     df['day_of_week'] = df['timestamp'].dt.dayofweek
     df['est_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
     df['est_jour_ferie'] = df['timestamp'].dt.date.apply(lambda x: 1 if x in sweden_holidays else 0)
@@ -103,19 +105,6 @@ def process_etl_meteo(input_path):
     # Pour renommer proprement une colonne existante :
     df = df.rename(columns={'timestamp': 'timestamp_rounded'})
 
-    # 3. Génération uuid
-    df['uuid'] = [str(uuid.uuid4()) for _ in range(len(df))]
-
-    # 3. Définition du nom de fichier de sortie (.parquet)
-    # On récupère le nom du fichier sans le chemin, et on change l'extension
-    # filename_json = os.path.basename(input_path)
-    # filename_parquet = filename_json.replace(".json", "_processed.parquet")
-    # output_path = os.path.join(DATA_DIR, filename_parquet)
-
-    # 4. Sauvegarde
-    # df.to_parquet(output_path, index=False)
-    # print(f"Fichier transformé sauvegardé : {output_path}")
-    # print(df.columns.tolist())
     return df
 
 # --- EXÉCUTION ---

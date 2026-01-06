@@ -5,6 +5,8 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 logger = logging.getLogger("neon_loader")
 
 load_dotenv()
@@ -21,7 +23,7 @@ def load_parquet_to_neon(table_name, data_df) -> None:
         if_exists="append",
         index=False,
         method="multi",
-        chunksize=10_000,
+        chunksize=1000,
     )
 
     logger.info("OK: %s chargée", table_name)
