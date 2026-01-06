@@ -1,3 +1,5 @@
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .schemas import PredictionInput, PredictionOutput
@@ -6,14 +8,28 @@ from .database import SessionLocal, engine, get_db
 from . import data_structure
 from .weather_utils import get_weather_features, get_calendar_features
 
+# Configuration des logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Création des tables au démarrage de l'application
+    logger.info("Vérification et création des tables de base de données...")
+    try:
+        data_structure.Base.metadata.create_all(bind=engine)
+        logger.info("Tables de base de données prêtes.")
+    except Exception as e:
+        logger.error(f"Erreur lors de la création des tables : {e}")
+    yield
+
+
 app = FastAPI(
     title="API Delay Forecast",
     description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports de Stockholm en fonction de la météo et des conditions de circulation",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
-
-# On crée les tables au démarrage
-data_structure.Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 async def root():
@@ -62,6 +78,4 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
-    # On crée les tables uniquement quand on lance l'app directement
-    data_structure.Base.metadata.create_all(bind=engine)
     uvicorn.run(app, host="0.0.0.0", port=8000)
