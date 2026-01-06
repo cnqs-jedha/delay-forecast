@@ -1,0 +1,60 @@
+artifact_path: mlflow-artifacts:/852208109654299689/models/m-675b96af91924744b953e75cfd57236d/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.7
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.0
+is_signature_from_type_hint: false
+mlflow_version: 3.5.1
+model_id: m-675b96af91924744b953e75cfd57236d
+model_size_bytes: 1276071
+model_uuid: m-675b96af91924744b953e75cfd57236d
+prompts: null
+run_id: 1a0b449edd024889a0b3cf6f80d5e347
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  serving_input_path: serving_input_example.json
+  type: dataframe
+signature:
+  inputs: '[{"type": "long", "name": "hour", "required": true}, {"type": "long", "name":
+    "stop_sequence", "required": true}, {"type": "long", "name": "cloud_cover", "required":
+    true}, {"type": "long", "name": "day_of_week", "required": true}, {"type": "double",
+    "name": "dew_point_2m", "required": true}, {"type": "long", "name": "est_jour_ferie",
+    "required": true}, {"type": "long", "name": "est_weekend", "required": true},
+    {"type": "long", "name": "month", "required": true}, {"type": "long", "name":
+    "neige_fondue", "required": true}, {"type": "double", "name": "precipitation",
+    "required": true}, {"type": "double", "name": "rain", "required": true}, {"type":
+    "long", "name": "risque_gel_neige", "required": true}, {"type": "long", "name":
+    "risque_gel_pluie", "required": true}, {"type": "double", "name": "snowfall",
+    "required": true}, {"type": "long", "name": "soleil_leve", "required": true},
+    {"type": "double", "name": "temperature_2m", "required": true}, {"type": "long",
+    "name": "vacances_scolaires", "required": true}, {"type": "long", "name": "wind_direction_10m",
+    "required": true}, {"type": "double", "name": "wind_gusts_10m", "required": true},
+    {"type": "double", "name": "wind_speed_10m", "required": true}, {"type": "double",
+    "name": "hour_sin", "required": true}, {"type": "double", "name": "hour_cos",
+    "required": true}, {"type": "double", "name": "day_sin", "required": true}, {"type":
+    "double", "name": "day_cos", "required": true}, {"type": "double", "name": "month_sin",
+    "required": true}, {"type": "double", "name": "month_cos", "required": true},
+    {"type": "long", "name": "direction_id_1", "required": true}, {"type": "long",
+    "name": "weather_code_1", "required": true}, {"type": "long", "name": "weather_code_2",
+    "required": true}, {"type": "long", "name": "weather_code_3", "required": true},
+    {"type": "long", "name": "weather_code_51", "required": true}, {"type": "long",
+    "name": "weather_code_53", "required": true}, {"type": "long", "name": "weather_code_55",
+    "required": true}, {"type": "long", "name": "weather_code_61", "required": true},
+    {"type": "long", "name": "weather_code_63", "required": true}, {"type": "long",
+    "name": "weather_code_71", "required": true}, {"type": "long", "name": "weather_code_73",
+    "required": true}, {"type": "long", "name": "weather_code_75", "required": true}]'
+  outputs: '[{"type": "double", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-01-06 09:44:15.409254'

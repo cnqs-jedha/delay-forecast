@@ -77,14 +77,16 @@ def preprocess(df):
     # Liste des colonnes qui DOIVENT être catégorielles (même si int)
     categorical_cols = []
     
-    # a) Vérifier bus_nbr
+    # Vérifier bus_nbr
     if 'bus_nbr' in X.columns:
         categorical_cols.append('bus_nbr')
+        X['bus_nbr'] = X['bus_nbr'].astype(str)
         print(f"bus_nbr trouvé : {X['bus_nbr'].nunique()} valeurs uniques")
     
     #  Vérifier direction_id  
     if 'direction_id' in X.columns:
         categorical_cols.append('direction_id')
+        X['direction_id'] = X['direction_id'].astype(str)    
         print(f"direction_id trouvé : {X['direction_id'].nunique()} valeurs uniques")
     
     # Weather code : le forcer en catégoriel
@@ -94,6 +96,9 @@ def preprocess(df):
         X['weather_code'] = X['weather_code'].astype(str)
         print(f"weather_code trouvé : {X['weather_code'].nunique()} codes uniques")
         print(f"Codes présents : {sorted(X['weather_code'].unique())}")
+    
+    print(f"\nColonnes catégorielles : {categorical_cols}")   
+    print(f"  Type : {X['weather_code'].dtype}")
     
     # Feature Engineering Cyclique pour l'heure
     if 'hour' in X.columns:
@@ -116,8 +121,9 @@ def preprocess(df):
     #  One-Hot Encoding des catégorielles
     if categorical_cols:
         print(f"\n One-Hot Encoding de : {categorical_cols}")
-        X = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
-        print(f"Encoding terminé")
+        print(f" Colonnes avant : {X.shape[1]}")
+        X = pd.get_dummies(X, columns=categorical_cols, drop_first=True, dtype=int)
+        print(f"Encoding terminé. Colonnes après : {X.shape[1]}")
     else:
         print("\n Aucune colonne catégorielle détectée !")
     
@@ -126,6 +132,8 @@ def preprocess(df):
     X = X.select_dtypes(include=[np.number])
     after_cleanup = X.shape[1]
     
+
+
     if before_cleanup > after_cleanup:
         print(f"\n{before_cleanup - after_cleanup} colonnes non-numériques supprimées")
     
