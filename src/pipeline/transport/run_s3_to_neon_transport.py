@@ -10,8 +10,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2025-02-03"
-DATE_END = "2025-02-09"
+DATE_BEGIN = "2025-07-28"
+DATE_END = "2025-08-03"
 
 logger.info("RUN Transport")
 
