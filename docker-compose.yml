@@ -11,10 +11,15 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY}
     AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Paris
+    MLFLOW_TRACKING_URI: http://mlflow:5000
   volumes:
     - ./services/airflow/dags:/opt/airflow/dags
     - ./services/airflow/scripts:/opt/airflow/scripts
     - ./libs:/opt/project/libs
+    - ./src/pipeline:/opt/project/pipeline
+    - ./data:/opt/project/data
+    - ./data:/opt/data
+    - ./mlflow:/mlflow
   depends_on:
     airflow-db:
       condition: service_healthy
@@ -75,9 +80,9 @@ services:
       MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
       MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
     volumes:
-      - mlflow_data:/mlflow
+      - ./mlflow:/mlflow
     command: >
-      bash -lc "mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT}"
+      bash -lc "mkdir -p /mlflow/artifacts && chmod -R 777 /mlflow && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT}"
     ports:
       - "5000:5000"
     healthcheck:
@@ -128,5 +133,4 @@ services:
 
 volumes:
   airflow_db_data:
-  mlflow_data:
   evidently_reports:

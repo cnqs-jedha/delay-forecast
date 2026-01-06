@@ -6,5 +6,7 @@ pandas==2.2.2
 scikit-learn==1.5.1
 mlflow==2.14.3
 evidently==0.4.32
+holidays==0.63
+gtfs-realtime-bindings==1.0.0
 
 cryptography==43.0.1

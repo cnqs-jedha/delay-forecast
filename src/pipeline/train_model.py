@@ -18,7 +18,7 @@ load_dotenv()
 db_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
-mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
 mlflow.set_experiment("Retards_transports_Stockholm")
 
 def load_data():

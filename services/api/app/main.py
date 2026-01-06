@@ -5,6 +5,9 @@ from .model import model_instance
 from .database import SessionLocal, engine, get_db
 from . import data_structure
 
+# Création des tables au démarrage (si elles n'existent pas)
+data_structure.Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
     title="API Delay Forecast",
     description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports parisiens en fonction de la météo et des conditions de circulation",
