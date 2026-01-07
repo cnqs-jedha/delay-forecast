@@ -42,7 +42,7 @@ def get_weather_features(month: int, day: int, hour: int):
     }
     
     try:
-        response = requests.get(url, params=params, timeout=5)
+        response = requests.get(url, params=params, timeout=15)
         response.raise_for_status()
         data = response.json()
         
