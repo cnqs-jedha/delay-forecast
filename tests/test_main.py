@@ -44,7 +44,11 @@ def test_predict_success(mock_calendar, mock_weather, mock_predict, client):
         "neige_fondue": 0
     }
     
-    mock_predict.return_value = 180.5  # Retard prédit en secondes
+    mock_predict.return_value = {
+        "prediction_P50": 100.0,
+        "prediction_P80": 150.0,
+        "prediction_P90": 200.0
+    }
     
     payload = {
         "direction_id": 0,
@@ -58,7 +62,9 @@ def test_predict_success(mock_calendar, mock_weather, mock_predict, client):
     
     assert response.status_code == 200
     data = response.json()
-    assert data["prediction"] == 180.5
+    assert data["prediction_P50"] == 100.0
+    assert data["prediction_P80"] == 150.0
+    assert data["prediction_P90"] == 200.0
     
     # Vérifications des appels
     mock_calendar.assert_called_once_with(5, 15, 3)
@@ -127,7 +133,11 @@ def test_predict_saves_log_to_db(mock_calendar, mock_weather, mock_predict, clie
     # Mocks minimaux
     mock_calendar.return_value = {"est_weekend": 0}
     mock_weather.return_value = {"temperature_2m": 12.0}
-    mock_predict.return_value = 42.0
+    mock_predict.return_value = {
+        "prediction_P50": 42.0,
+        "prediction_P80": 60.0,
+        "prediction_P90": 90.0
+    }
     
     payload = {
         "direction_id": 1,
@@ -146,7 +156,9 @@ def test_predict_saves_log_to_db(mock_calendar, mock_weather, mock_predict, clie
     log = db_session.query(PredictionLog).order_by(PredictionLog.id.desc()).first()
     
     assert log is not None
-    assert log.prediction == 42.0
+    assert log.prediction_P50 == 42.0
+    assert log.prediction_P80 == 60.0
+    assert log.prediction_P90 == 90.0
     assert log.direction_id == 1
     # Vérifie qu'on a bien sauvegardé les features enrichies
     assert log.temperature_2m == 12.0 # Venant du mock météo
