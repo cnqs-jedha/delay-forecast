@@ -7,10 +7,23 @@ class MLModel:
     def __init__(self):
         self.models = None
         
-        # Chemin vers le pack de modèles quantiles dans le dossier models à la racine du projet
+        # Chemin vers le pack de modèles quantiles
         from pathlib import Path
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
-        model_path = str(project_root / "models" / "50_80_90_models_quantiles.pkl")
+        
+        # 1. Tester le chemin local (développement) : 4 niveaux au dessus de services/api/app/model.py
+        local_path = Path(__file__).resolve().parent.parent.parent.parent / "models" / "50_80_90_models_quantiles.pkl"
+        
+        # 2. Tester le chemin Docker : les modèles sont généralement montés dans /app/models
+        # Si on est dans /app/app/model.py, c'est 2 niveaux au dessus
+        docker_path = Path(__file__).resolve().parent.parent / "models" / "50_80_90_models_quantiles.pkl"
+        
+        if local_path.exists():
+            model_path = str(local_path)
+        elif docker_path.exists():
+            model_path = str(docker_path)
+        else:
+            # Par défaut, on garde le chemin Docker pour la visibilité dans les logs d'erreur
+            model_path = str(docker_path)
         
         try:
             print(f"Tentative de chargement des modèles depuis {model_path}...")

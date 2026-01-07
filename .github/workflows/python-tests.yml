@@ -4,6 +4,7 @@ on:
     branches: [ branch-fastapi, main, master ]
   pull_request:
     branches: [ branch-fastapi, main, master ]
+  workflow_dispatch:
 
 jobs:
   # Job de test (CI)
