@@ -1,10 +1,6 @@
 import pandas as pd
-import json
 import holidays
-from datetime import datetime
 import os
-import uuid
-
 
 # Configuration du chemin vers le dossier data
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,23 +12,11 @@ def etl_weather_transformation(json_file):
     Transforme le JSON brut Open-Meteo en DataFrame aplati 
     avec logique Sunrise/Sunset et risques météo.
     """
-# Construction du chemin complet vers le fichier dans /data
-    # json_path = os.path.join(DATA_DIR, json_filename)
-    
-    # if not os.path.exists(json_path):
-    #     raise FileNotFoundError(f"Le fichier {json_path} est introuvable.")
-
-    # with open(json_path, 'r', encoding='utf-8') as f:
-    #     data = json.load(f)
-
     data = json_file
 
     # Aplatissement horaire
     df_h = pd.DataFrame(data['hourly'])
     df_h['timestamp'] = pd.to_datetime(df_h['time'])
-    
-    # Arrondi à l'heure la plus proche pour jointure transport
-    #df_h['timestamp_rounded'] = df_h['timestamp'].dt.round('H')
 
     # Aplatissement journalier (sunrise/sunset)
     df_d = pd.DataFrame(data['daily'])
@@ -62,10 +46,8 @@ def enrich_calendar_features(df):
     sweden_holidays = holidays.CountryHoliday('SE')
 
     # Bases (année, mois, jour de la semaine, weekend, jour férié)
-    df["observation_uuid"] = [str(uuid.uuid4()) for _ in range(len(df))]
     df['year'] = df['timestamp'].dt.year
     df['month'] = df['timestamp'].dt.month
-    # df['day'] = df['timestamp'].dt.day
     df['day_of_week'] = df['timestamp'].dt.dayofweek
     df['est_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
     df['est_jour_ferie'] = df['timestamp'].dt.date.apply(lambda x: 1 if x in sweden_holidays else 0)

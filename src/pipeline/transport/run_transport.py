@@ -1,17 +1,9 @@
 import logging
-from datetime import datetime, timezone, timedelta
-from collections import defaultdict
-import random
+from datetime import datetime, timedelta
 import gc
-import json
-import pandas as pd
-import os
-from sqlalchemy import create_engine
-from dotenv import load_dotenv
 
 from pipeline.transport.utils.call_api_transport import call_koda_history_api, call_koda_reference_api
 from pipeline.transport.utils.read_data_transport import read_koda_history_day_stream, read_koda_reference_data
-from pipeline.transport.utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
 from pipeline.transport.utils.filter_route_transport import filter_by_bus_route
 from pipeline.transport.utils.transform_data_transport import transform_S3_to_neon
 from pipeline.transport.utils.s3_transport import send_to_S3
@@ -54,16 +46,12 @@ while current <= end:
         try:
             r_history = call_koda_history_api(current_string)
             # Lit les données d'historique par batch
-            # try:
             history_entities, bad_files = read_koda_history_day_stream(r_history, 500)
-            # except Exception as e:
-            #     logger.exception("❌ NO READING DATA %s", current_string)
-            #     bad_days.append((current_string, "reference", repr(e)))
 
             if not history_entities:
                 logger.warning("⚠️ %s — history vide ou archive invalide → jour ignoré", current_string)
                 bad_days.append((current_string, "history", "empty_or_invalid"))
-                continue   # ⛔ stop ce jour, passe au suivant
+                continue
         except Exception as e:
             logger.exception("❌ HISTORY CALL cassé %s", current_string)
             bad_days.append((current_string, "reference", repr(e)))
@@ -108,9 +96,8 @@ while current <= end:
         del history_entities, bad_files
         del reference_routes, reference_trips
         del filtered_data
-
+        
         gc.collect()
-        # Ajoute un jour
         current += timedelta(days=1)
 
 logger.info(datas[:1])

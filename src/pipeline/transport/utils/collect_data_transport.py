@@ -1,22 +1,3 @@
-import requests
-import os
-import io
-import py7zr
-import zipfile
-import csv
-import tempfile
-from pathlib import Path
-from dotenv import load_dotenv
-import shutil
-import copy
-from google.transit import gtfs_realtime_pb2
-from google.protobuf.message import DecodeError
-import logging
-from datetime import datetime, timezone, timedelta
-from collections import defaultdict
-import random
-import gc
-
 # Crée une tableu de correspondance basé sur une colonne
 def corr_array_creation(reference_data, id_key, ref_fields:tuple):
     """
@@ -30,7 +11,7 @@ def corr_array_creation(reference_data, id_key, ref_fields:tuple):
         tid = r.get(id_key)
         if not tid:
             continue
-        # on stocke seulement ce dont on a besoin
+
         ref[tid] = {k: r.get(k) for k in ref_fields}
     
     return ref
@@ -39,7 +20,7 @@ def corr_array_creation(reference_data, id_key, ref_fields:tuple):
 def flatten_history_entity_koda(history_items, trips_corr):
     # si pas de trip_update -> rien
     if not history_items.HasField("trip_update"):
-        return  # stop (fonction generator: pas de yield)
+        return
 
     tu = history_items.trip_update
     trip = tu.trip
@@ -48,7 +29,7 @@ def flatten_history_entity_koda(history_items, trips_corr):
     # MERGE + FILTRE ici
     corr = trips_corr.get(tid)
     if corr is None:
-        return  # trip_id pas choisi => on skip direct
+        return
 
     route_id = corr.get("route_id")
     direction_id = corr.get("direction_id")
@@ -57,7 +38,6 @@ def flatten_history_entity_koda(history_items, trips_corr):
     feed_ts = tu.timestamp if tu.HasField("timestamp") else None
     vehicle_id = tu.vehicle.id if tu.HasField("vehicle") else None
 
-    #### ATTENTION ESSAYER DE R2CUP2RER TOUTES LES LIGNES SANS CHOISIR MAIS A PLAT
     for stu in tu.stop_time_update:
         yield {
             "timestamp": feed_ts,

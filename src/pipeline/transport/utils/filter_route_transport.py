@@ -1,8 +1,5 @@
-import logging
-from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 import random
-import gc
 
 from pipeline.transport.utils.collect_data_transport import corr_array_creation, flatten_history_entity_koda
 
@@ -34,8 +31,8 @@ def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2
             r for r in r_routes
             if str(r.get("route_short_name")) == bus_nbr
         ]
-    print(routes_bus_chosed)
-    #Récupère tous les route_id de bus choisis, un ou plusieurs
+
+    # Récupère tous les route_id de bus choisis, un ou plusieurs
     for route in routes_bus_chosed:
         route_ids_chosed.append(route['route_id'])
 
@@ -57,26 +54,9 @@ def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2
         and getattr(e.trip_update, "trip", None)
         and e.trip_update.trip.trip_id in valid_trip_ids
     ]
-    # print(filtered_history[:2])
+
     for e in filtered_history:
         final_data.extend(flatten_history_entity_koda(e, ref_trips_choosed_corr))
-
-    #for row in final_data:
-        #row.pop("trip_id", None)
-
-        #### Ce qu'il y a en dessous c'est pour arrondir l'heure @Nadège
-        #ts = row.get("timestamp")
-
-        #ts_hour = ((ts + 1800) // 3600) * 3600
-        #row["timestamp_hour"] = ts_hour
-
-        #row["datetime_rounded"] = datetime.fromtimestamp(ts_hour, tz=timezone.utc).isoformat()
-        #row["hour"] = (row["timestamp_hour"] // 3600) % 24
-        #row.pop("timestamp_hour", None)
-        #### Ce qu'il y a au-dessus c'est pour arrondir l'heure @Nadège
-
-        # Mettre le numéro du bus pour entrainer le modèle avec plusieurs potentiel num de bus, à rendre dynamique si plusieurs
-        #row['bus_nbr'] = bus_number
 
     counts = defaultdict(int)
 
@@ -84,7 +64,7 @@ def filter_by_bus_route(bus_nbr, r_routes, r_trips, history_data, bus_per_hour=2
     random.shuffle(final_data)
 
     for row in final_data:
-        # Filtrer pour deux bus par heure et pas plus 
+        # Filtrer pour XX bus par heure et pas plus 
         key = (
             row.get("hour"),
             row.get("direction_id"),

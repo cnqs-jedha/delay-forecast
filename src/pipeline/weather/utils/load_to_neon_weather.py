@@ -1,4 +1,3 @@
-import pandas as pd
 import os
 import logging
 from sqlalchemy import create_engine
@@ -14,8 +13,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 def load_parquet_to_neon(table_name, data_df) -> None:
     engine = create_engine(DATABASE_URL)
-
-    # df = pd.DataFrame(data_array)
 
     data_df.to_sql(
         table_name,

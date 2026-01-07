@@ -7,7 +7,6 @@ import sqlalchemy as sa
 from pipeline.weather.utils.call_api_meteo import fetch_weather_data
 from pipeline.weather.utils.transform_meteo_archives import process_etl_meteo
 from pipeline.weather.utils.transform_meteo_previsions import process_etl_previsions
-from pipeline.weather.utils.load_to_neon import load_to_neon
 from pipeline.weather.utils.s3_weather import send_to_S3
 from pipeline.weather.utils.load_to_neon_weather import load_parquet_to_neon
 
