@@ -1,8 +1,10 @@
 import os
+import joblib
 import numpy as np
 import pandas as pd
 import mlflow
 import mlflow.sklearn
+from pathlib import Path
 from sqlalchemy import create_engine, text
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingRegressor
@@ -170,6 +172,22 @@ def train_quantile_models():
         X, y, test_size=0.2, shuffle=False, random_state=42
     )
     
+    # --- DÉMONSTRATION DU RESPECT DE LA CHRONOLOGIE ---
+    # On récupère les index (qui correspondent à l'ordre d'origine dans la DB)
+    train_indices = X_train.index
+    test_indices = X_test.index
+
+    print("\n--- PREUVE DU SPLIT TEMPOREL ---")
+    print(f"Dernier index du bloc TRAIN : {train_indices.max()}")
+    print(f"Premier index du bloc TEST  : {test_indices.min()}")
+
+    if test_indices.min() > train_indices.max():
+        print(" DÉMONSTRATION RÉUSSIE : Le bloc Test commence strictement après la fin du bloc Train.")
+        print(f"Aucune donnée du futur (index > {train_indices.max()}) n'est présente dans le Train.")
+    else:
+        print("ALERTE : Il y a un chevauchement ou les données n'étaient pas triées !")
+    print("-" * 30) 
+
     print(f"\n Split des données :")
     print(f"   Train : {len(X_train)} observations")
     print(f"   Test  : {len(X_test)} observations")
@@ -192,7 +210,9 @@ def train_quantile_models():
         
         # Log de l'exemple d'input pour signature
         input_example = X_train.head(1)
-
+        
+        all_trained_models = {} # Dictionnaire pour enregistrer les modèles
+        
         for alpha, name in zip(quantiles, names):
             print(f"\n Entraînement du modèle {name} (alpha={alpha})...")
             
@@ -206,6 +226,7 @@ def train_quantile_models():
             )
             
             model.fit(X_train, y_train)
+            all_trained_models[name] = model # Stockage de l'objet model
             preds = model.predict(X_test)
 
             # Calcul des métriques
@@ -239,6 +260,8 @@ def train_quantile_models():
             print(f" Fiabilité : {reliability:.1%}")
             print(f" Prédiction moyenne : {mean_pred:.1f}s")
             print(f" Retard moyen réel  : {mean_actual:.1f}s")
+
+ 
             
         # Feature importance du dernier modèle (P90)
         feature_importance = pd.DataFrame({
@@ -256,6 +279,21 @@ def train_quantile_models():
     print("\n" + "="*80)
     print("ENTRAÎNEMENT TERMINÉ")
     print("="*80)
+
+    # --- SAUVEGARDE DES 3 MODELES ---
+    current_file = Path(__file__).resolve()
+    project_root = current_file.parent.parent.parent 
+    model_dir = project_root / "models"
+    
+    # Création du dossier s'il n'existe pas
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    # On sauvegarde le dictionnaire contenant P50, P80 et P90
+    model_path = model_dir / "50_80_90_models_quantiles.pkl"
+    joblib.dump(all_trained_models, model_path)
+    
+    print(f"Succès : Pack de {len(all_trained_models)} modèles sauvegardé.")
+    print(f"Chemin : {model_path}")
 
 if __name__ == "__main__":
     train_quantile_models()
