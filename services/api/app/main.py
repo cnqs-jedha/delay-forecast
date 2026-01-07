@@ -60,21 +60,21 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
     
     # 3. Prédiction
     try:
-        prediction = model_instance.predict(features)
-        print(f"Prédiction calculée: {prediction}")
+        predictions = model_instance.predict(features)
+        print(f"Prédictions calculées: {predictions}")
     except Exception as e:
         print(f"Erreur lors de la prédiction : {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     # 4. Log en DB
-    db_log = data_structure.PredictionLog(**features, prediction=prediction)
+    db_log = data_structure.PredictionLog(**features, **predictions)
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
     print(f"Log enregistré en base de données (ID: {db_log.id})")
     print(f"-------------------------------")
     
-    return PredictionOutput(prediction=prediction)
+    return PredictionOutput(**predictions)
 
 if __name__ == "__main__":
     import uvicorn

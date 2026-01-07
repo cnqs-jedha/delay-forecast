@@ -17,10 +17,17 @@ load_dotenv()
 db_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
+import tempfile
 mlflow.set_tracking_uri("http://localhost:5000")
-experiment_name = "Retards_transports_Stockholm_v7"
+experiment_name = "Retards_transports_Stockholm_v8"
+
+# Assurer un dossier local pour les artifacts si le serveur est mal configuré
+# ou si l'on veut éviter d'écrire à la racine /mlflow
+artifact_location = str(Path.cwd() / "mlruns_artifacts")
+Path(artifact_location).mkdir(exist_ok=True)
+
 try:
-    mlflow.create_experiment(experiment_name)
+    mlflow.create_experiment(experiment_name, artifact_location=f"file://{artifact_location}")
 except Exception:
     pass
 mlflow.set_experiment(experiment_name)

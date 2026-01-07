@@ -16,4 +16,6 @@ class PredictionInput(BaseModel):
     
 # Structure pour les données de sortie
 class PredictionOutput(BaseModel):
-    prediction: float
+    prediction_P50: float
+    prediction_P80: float
+    prediction_P90: float
