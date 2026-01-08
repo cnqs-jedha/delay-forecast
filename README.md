@@ -1,4 +1,4 @@
-# Delay Forecast — POC MLOps
+# :bus: Delay Forecast — POC MLOps
 
 Ce projet est un POC MLOps de prédiction de retards de transports en commun en fonction de contextes externes (météo, jours fériés, temporalité, etc.).
 
@@ -6,7 +6,7 @@ Il combine ingestion de données, transformation, entraînement de modèles, sui
 
 📍 Les données utilisées concernent les transports en commun de la ville de Stockholm.
 
-## :brain: Objectif du projet
+## :rocket: Objectif du projet
 
 Le projet couvre l’ensemble du cycle de vie Machine Learning :
 
@@ -42,7 +42,7 @@ Le projet couvre l’ensemble du cycle de vie Machine Learning :
 
 ```
 
-## :folder: Architecture globale
+## :building_construction: Architecture globale
 
 ```bash
 delay-forecast/
@@ -117,7 +117,7 @@ MLFlow permet de :
 - gérer les versions,
 - promouvoir un modèle de production
 
-## Installation
+## :atom_symbol: Installation
 
 Prérequis
 
@@ -210,13 +210,13 @@ Via l'interface MLflow (http://localhost:5000) :
 3. Cliquer sur une version
 4. Cliquer sur **Stage** → **Transition to Production**
 
-## Tests & qualité
+## :test_tube: Tests & qualité
 
 - Tests unitaires dans `tests/`
 - Validation des pipelines ETL
 - Intégration continue via GitHub Actions
 
-## Dépannage
+## :mag: Dépannage
 
 Airflow
 
@@ -240,13 +240,13 @@ Docker
 - Rebuild nécessaire → `make rebuild` pour forcer la reconstruction sans cache
 - Conteneurs qui plantent → `make logs` pour surveiller en continu
 
-## Roadmap
+## :compass: Roadmap
 
-[] Retraining automatique
-[] Monitoring du drift
-[] Inclusion nouvelles API
-[] Authentification API
-[] Déploiement cloud
+* [ ] Retraining automatique
+* [ ] Monitoring du drift
+* [ ] Inclusion nouvelles API
+* [ ] Authentification API
+* [ ] Déploiement cloud
 
 ## :busts_in_silhouette: Auteurs
 
