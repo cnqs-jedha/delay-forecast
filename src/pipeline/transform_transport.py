@@ -132,4 +132,17 @@ def process_etl_transport(filename, batch_size=200):
     return df
 
 if __name__ == "__main__":
-    process_etl_transport("transport_koda_2025-03-04.7z", batch_size=100)
+    from datetime import datetime, timedelta
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MODE MANUEL - Décommenter pour traiter une date spécifique
+    # ═══════════════════════════════════════════════════════════════════════
+    # process_etl_transport("transport_koda_2024-01-01.7z", batch_size=100)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MODE AUTOMATIQUE - Traite les données de la veille
+    # ═══════════════════════════════════════════════════════════════════════
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    filename = f"transport_koda_{yesterday}.7z"
+    print(f"Traitement de : {filename}")
+    process_etl_transport(filename, batch_size=100)

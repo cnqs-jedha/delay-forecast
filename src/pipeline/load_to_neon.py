@@ -11,13 +11,23 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def load_to_neon():
+    """
+    Charge les fichiers Parquet vers Neon DB.
+    
+    Note: Cette fonction utilise des noms de fichiers par défaut.
+    En production, utiliser load_parquet_to_neon() avec des noms dynamiques.
+    """
     # Utilisation de SQLAlchemy qui est plus flexible pour la création automatique de tables
     engine = create_engine(DATABASE_URL)
     
-    # CONFIGURATION : On sépare tout - pas le plus recommandé, mais plus simple pour l'instant
+    # ═══════════════════════════════════════════════════════════════════════
+    # CONFIGURATION - Adapter les noms de fichiers selon vos données
+    # ═══════════════════════════════════════════════════════════════════════
+    # Note: Ces noms sont des exemples. En production, les fichiers sont
+    # générés dynamiquement par les scripts ETL avec des dates dans le nom.
     mapping = {
-        "stg_transport_archive": "transport_koda_2025-03-04_processed.parquet",
-        "stg_transport_realtime": "transport_rt_20251224_1119_processed.parquet",
+        "stg_transport_archive": "transport_archive_processed.parquet",
+        "stg_transport_realtime": "transport_realtime_processed.parquet",
         "stg_weather_archive": "weather_stockholm_archive_processed.parquet",
         "stg_weather_forecast": "weather_stockholm_forecast_processed.parquet"
     }

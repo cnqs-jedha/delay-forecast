@@ -16,12 +16,26 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger("RUN_PIPELINE")
 
 def main():
-    LAT, LON = 59.3251172, 18.0710935
-    DATE_START = "2025-03-04"
-    DATE_END = "2025-03-06"
+    from datetime import datetime, timedelta
     
-    DATE_HISTO = "2025-03-04"
-
+    LAT, LON = 59.3251172, 18.0710935
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MODE MANUEL - Décommenter pour initialisation de la base historique
+    # ═══════════════════════════════════════════════════════════════════════
+    # DATE_START = "2024-01-01"  # Date de début historique souhaitée
+    # DATE_END = "2025-12-31"    # Date de fin historique souhaitée
+    # DATE_HISTO = "2024-01-01"  # Date spécifique pour transport
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # MODE AUTOMATIQUE (production) - dernière semaine
+    # ═══════════════════════════════════════════════════════════════════════
+    today = datetime.now()
+    DATE_START = (today - timedelta(days=7)).strftime('%Y-%m-%d')  # J-7
+    DATE_END = (today - timedelta(days=1)).strftime('%Y-%m-%d')    # Hier
+    DATE_HISTO = DATE_END  # Télécharge les données de la veille
+    
+    logger.info(f"Période : {DATE_START} → {DATE_END}")
     logger.info("Lancement du Pipeline Complet : Ingestion -> ETL -> Neon DB")
 
     # --- ÉTAPE 1 : INGESTION (API -> RAW FILES) ---

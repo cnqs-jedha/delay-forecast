@@ -11,23 +11,64 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 # Création du dossier data s'il n'existe pas
 os.makedirs(DATA_DIR, exist_ok=True)
 
-def get_dates(mode="archive"):
-    """Calcule les dates de début et de fin selon le mode choisi."""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODE MANUEL - Décommenter pour initialisation de la base historique
+# ═══════════════════════════════════════════════════════════════════════════
+# MANUAL_START_DATE = "2024-01-01"  # Date de début historique souhaitée
+# MANUAL_END_DATE = "2025-12-31"    # Date de fin historique souhaitée
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def get_dates(mode="archive", start_date=None, end_date=None):
+    """
+    Calcule les dates de début et de fin selon le mode choisi.
+    
+    Args:
+        mode: "archive" (historique) ou "forecast" (prévisions)
+        start_date: Date de début manuelle (format YYYY-MM-DD) - optionnel
+        end_date: Date de fin manuelle (format YYYY-MM-DD) - optionnel
+    
+    Returns:
+        tuple: (start_date, end_date) au format string YYYY-MM-DD
+    
+    Notes:
+        - Si start_date et end_date sont fournis, ils sont utilisés directement
+        - Sinon, calcul automatique :
+            - archive: dernière semaine (J-7 à J-1)
+            - forecast: prochains 7 jours (J à J+7)
+    """
+    # Mode manuel : si les dates sont fournies explicitement
+    if start_date and end_date:
+        return start_date, end_date
+    
     today = datetime.now()
+    
     if mode == "archive":
-        # Historique : de 2023 au jour précédent
-        start = "2023-01-01"
-        end = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+        # Mode automatique : dernière semaine complète
+        end = (today - timedelta(days=1)).strftime('%Y-%m-%d')  # Hier
+        start = (today - timedelta(days=7)).strftime('%Y-%m-%d')  # J-7
     else:
         # Prévisions : de J+0 à J+7
         start = today.strftime('%Y-%m-%d')
         end = (today + timedelta(days=7)).strftime('%Y-%m-%d')
+    
     return start, end
 
-def fetch_weather_data(latitude, longitude, filename, mode="archive"):
-    """Récupère les données météo et les enregistre en JSON localement."""
+def fetch_weather_data(latitude, longitude, filename, mode="archive", start_date=None, end_date=None):
+    """
+    Récupère les données météo et les enregistre en JSON localement.
     
-    start_d, end_d = get_dates(mode)
+    Args:
+        latitude: Latitude du lieu
+        longitude: Longitude du lieu
+        filename: Nom du fichier de sortie
+        mode: "archive" ou "forecast"
+        start_date: Date de début (YYYY-MM-DD) - optionnel, sinon calculé automatiquement
+        end_date: Date de fin (YYYY-MM-DD) - optionnel, sinon calculé automatiquement
+    """
+    start_d, end_d = get_dates(mode, start_date, end_date)
+    print(f"Période : {start_d} → {end_d}")
     
     if mode == "archive":
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -84,7 +125,9 @@ if __name__ == "__main__":
 
     print("--- Démarrage de la collecte météo ---")
 
-    # 1. Collecte de l'historique
+    # ═══════════════════════════════════════════════════════════════════════
+    # OPTION 1 : Mode automatique (production) - dernière semaine
+    # ═══════════════════════════════════════════════════════════════════════
     fetch_weather_data(
         latitude=LAT,
         longitude=LON,
@@ -92,7 +135,19 @@ if __name__ == "__main__":
         filename="weather_stockholm_archive.json"
     )
 
-    # 2. Collecte des prévisions
+    # ═══════════════════════════════════════════════════════════════════════
+    # OPTION 2 : Mode manuel (initialisation) - Décommenter pour utiliser
+    # ═══════════════════════════════════════════════════════════════════════
+    # fetch_weather_data(
+    #     latitude=LAT,
+    #     longitude=LON,
+    #     mode="archive",
+    #     filename="weather_stockholm_archive_init.json",
+    #     start_date="2024-01-01",  # Date de début souhaitée
+    #     end_date="2025-12-31"     # Date de fin souhaitée
+    # )
+
+    # Collecte des prévisions (toujours automatique J à J+7)
     fetch_weather_data(
         latitude=LAT,
         longitude=LON,

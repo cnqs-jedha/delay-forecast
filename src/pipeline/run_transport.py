@@ -22,8 +22,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("RUN_TRANSPORT")
 
-DATE_BEGIN = "2025-03-15"
-DATE_END = "2025-03-16"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODE MANUEL - Décommenter pour initialisation de la base historique
+# ═══════════════════════════════════════════════════════════════════════════
+# DATE_BEGIN = "2024-01-01"  # Date de début historique souhaitée
+# DATE_END = "2024-01-31"    # Date de fin historique souhaitée
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODE AUTOMATIQUE (production) - dernière semaine
+# ═══════════════════════════════════════════════════════════════════════════
+today = datetime.now()
+DATE_BEGIN = (today - timedelta(days=7)).strftime('%Y-%m-%d')  # J-7
+DATE_END = (today - timedelta(days=1)).strftime('%Y-%m-%d')    # Hier
+
+logger.info(f"Période : {DATE_BEGIN} → {DATE_END}")
 
 start = datetime.strptime(DATE_BEGIN, "%Y-%m-%d")
 end = datetime.strptime(DATE_END, "%Y-%m-%d")
