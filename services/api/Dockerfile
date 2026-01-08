@@ -15,14 +15,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copier le fichier requirements.txt
-COPY requirements.txt ./requirements.txt
+# Copier le fichier requirements.txt (depuis services/api/ car context=.)
+COPY services/api/requirements.txt ./requirements.txt
 
 # Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code de l'application et les libs partagées
-COPY app ./app
+# Copier le code de l'application
+COPY services/api/app ./app
 
 # Exposer le port sur lequel l'API va tourner
 EXPOSE 8000

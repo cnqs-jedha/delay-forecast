@@ -13,8 +13,34 @@ Airflow • MLflow • FastAPI • Docker Compose • GitHub Actions • Neon Po
 # Première installation uniquement (si .env n'existe pas)
 cp .env.example .env
 # Puis renseigner les variables (voir section Configuration)
+
+# Télécharger les données GTFS statiques (une seule fois)
+python src/pipeline/download_gtfs_static.py
+
+# Démarrer les services
 make up
 ```
+
+### 📥 Données GTFS statiques (prérequis)
+
+Les fichiers GTFS statiques sont nécessaires pour le DAG `realtime_refresh` (mapping route_id → numéro de bus).
+
+```bash
+# Télécharger les fichiers GTFS pour Stockholm (SL)
+python src/pipeline/download_gtfs_static.py
+```
+
+**Prérequis :** 
+- Variable `GTFS_REGIONAL_STATIC_KEY` définie dans `.env`
+- Clé API obtenue gratuitement sur [Trafiklab](https://www.trafiklab.se/) (GTFS Regional → Static data)
+
+**Fichiers téléchargés** (dans `data/sweden_data/`) :
+- `routes.txt` — Liste des lignes de bus/métro
+- `stops.txt` — Liste des arrêts
+- `trips.txt` — Trajets planifiés
+- `stop_times.txt` — Horaires par arrêt
+
+> ℹ️ Ces fichiers changent rarement. Un seul téléchargement suffit pour un POC.
 
 ### URLs des services
 

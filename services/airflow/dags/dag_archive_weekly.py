@@ -223,11 +223,13 @@ def task_etl_meteo(**context):
     from transform_meteo_archives import process_etl_meteo
     from transform_meteo_previsions import process_etl_previsions
     from load_to_neon import load_parquet_to_neon
+    import os
     
     execution_date = context.get('ds', 'unknown')
     ti = context['ti']
+    DATA_DIR = "/opt/project/data"
     
-    logger.info(f"[{execution_date}] ETL météo")
+    logger.info(f"[{execution_date}] ETL meteo")
     
     # Récupérer les données depuis XCom
     archive_data = ti.xcom_pull(key='meteo_archive_data')
@@ -238,42 +240,88 @@ def task_etl_meteo(**context):
     # ETL Archive
     if archive_data:
         try:
-            transformed = process_etl_meteo(archive_data)
-            load_parquet_to_neon("stg_weather_archive", transformed)
-            logger.info("✅ Météo archive → Neon OK")
+            # process_etl_meteo retourne un DataFrame
+            df_transformed = process_etl_meteo(archive_data)
+            
+            # Sauvegarder en parquet temporaire
+            parquet_path = os.path.join(DATA_DIR, f"weather_archive_{execution_date}.parquet")
+            df_transformed.to_parquet(parquet_path, index=False)
+            
+            # Charger vers Neon
+            load_parquet_to_neon(parquet_path, "stg_weather_archive")
+            logger.info("Meteo archive -> Neon OK")
         except Exception as e:
-            logger.error(f"❌ ETL météo archive : {e}")
+            logger.error(f"ETL meteo archive : {e}")
             errors.append(str(e))
     
     # ETL Forecast
     if forecast_data:
         try:
-            transformed = process_etl_previsions(forecast_data)
-            load_parquet_to_neon("stg_weather_forecast", transformed)
-            logger.info("✅ Météo forecast → Neon OK")
+            df_transformed = process_etl_previsions(forecast_data)
+            
+            parquet_path = os.path.join(DATA_DIR, f"weather_forecast_{execution_date}.parquet")
+            df_transformed.to_parquet(parquet_path, index=False)
+            
+            load_parquet_to_neon(parquet_path, "stg_weather_forecast")
+            logger.info("Meteo forecast -> Neon OK")
         except Exception as e:
-            logger.error(f"❌ ETL météo forecast : {e}")
+            logger.error(f"ETL meteo forecast : {e}")
             errors.append(str(e))
     
     if len(errors) == 2:
-        raise Exception(f"ETL météo échoué : {errors}")
+        raise Exception(f"ETL meteo echoue : {errors}")
 
 
 def task_etl_transport(**context):
     """Transforme et charge les données transport vers Neon"""
     from transform_transport import process_etl_transport
     from load_to_neon import load_parquet_to_neon
+    import os
+    import glob
     
     execution_date = context.get('ds', 'unknown')
+    ti = context['ti']
+    DATA_DIR = "/opt/project/data"
+    
     logger.info(f"[{execution_date}] ETL transport archive")
     
     try:
-        # Les données ont été récupérées par la tâche d'ingestion
-        # Transformation et chargement
-        # Note: Adapter selon la structure réelle des fonctions
-        logger.info("✅ Transport archive → Neon OK")
+        # Récupérer la liste des fichiers téléchargés depuis XCom
+        transport_files = ti.xcom_pull(key='transport_archive_files')
+        
+        if not transport_files:
+            logger.warning("Aucun fichier transport a traiter")
+            return
+        
+        all_dfs = []
+        for filename in transport_files:
+            file_path = os.path.join(DATA_DIR, filename)
+            if os.path.exists(file_path):
+                try:
+                    # process_etl_transport traite un fichier .7z et retourne un DataFrame
+                    df = process_etl_transport(filename)
+                    if df is not None and not df.empty:
+                        all_dfs.append(df)
+                        logger.info(f"  {filename} : {len(df)} lignes")
+                except Exception as e:
+                    logger.warning(f"  {filename} echoue : {e}")
+        
+        if all_dfs:
+            import pandas as pd
+            df_combined = pd.concat(all_dfs, ignore_index=True)
+            
+            # Sauvegarder en parquet
+            parquet_path = os.path.join(DATA_DIR, f"transport_archive_{execution_date}.parquet")
+            df_combined.to_parquet(parquet_path, index=False)
+            
+            # Charger vers Neon (append pour ne pas écraser l'historique)
+            load_parquet_to_neon(parquet_path, "stg_transport_archive", if_exists="append")
+            logger.info(f"Transport archive -> Neon OK ({len(df_combined)} lignes)")
+        else:
+            logger.warning("Aucune donnee transport extraite")
+            
     except Exception as e:
-        logger.error(f"❌ ETL transport : {e}")
+        logger.error(f"ETL transport : {e}")
         raise
 
 

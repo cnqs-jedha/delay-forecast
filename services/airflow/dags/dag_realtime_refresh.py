@@ -14,6 +14,10 @@ Note: La fréquence de 5 minutes est un compromis entre :
 Pour ajuster : modifier le schedule "*/5 * * * *"
 - */2 = toutes les 2 minutes (heures de pointe)
 - */10 = toutes les 10 minutes (heures creuses)
+
+PRÉREQUIS :
+- Variable d'environnement API_GTFS_RT_KEY
+- Fichiers statiques GTFS dans /opt/project/data/sweden_data/ (routes.txt)
 """
 
 from airflow import DAG
@@ -51,7 +55,6 @@ realtime_task_args = {
 
 # Configuration bus
 BUS_NUMBER = "541"
-MAX_BUS_PER_HOUR = 3
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -60,57 +63,65 @@ MAX_BUS_PER_HOUR = 3
 
 def task_fetch_transport_realtime(**context):
     """
-    Récupère les données transport en temps réel depuis l'API.
-    TRUNCATE + INSERT dans stg_transport_realtime.
+    Récupère les données transport en temps réel depuis l'API GTFS-RT.
+    
+    Étapes :
+    1. Télécharge le fichier .pb depuis l'API
+    2. Parse et transforme les données
+    3. Charge dans stg_transport_realtime (TRUNCATE + INSERT)
+    
+    Prérequis : Fichiers statiques GTFS (routes.txt) dans /opt/project/data/sweden_data/
     """
-    from transport.utils.call_api_transport import call_rt_history_api, call_rt_reference_api
-    from transport.utils.read_data_transport import read_koda_reference_data
-    from transport.utils.filter_route_transport import filter_by_bus_route
-    from transport.utils.transform_data_transport import transform_S3_to_neon
-    from transport.utils.load_to_neon_transport import load_parquet_to_neon
-    from google.transit import gtfs_realtime_pb2
+    from call_api_transport import fetch_transport_realtime
+    from transform_transport_reel import process_etl_transport_live
+    from load_to_neon import load_parquet_to_neon
+    import pandas as pd
     
     execution_time = context.get('ts', 'unknown')
     logger.info(f"[{execution_time}] Fetch transport realtime")
     
+    # Chemins
+    DATA_DIR = "/opt/project/data"
+    STATIC_DATA_PATH = os.path.join(DATA_DIR, "sweden_data")
+    
     try:
-        # 1. Appel API temps réel
-        r_history = call_rt_history_api()
+        # 1. Télécharger le fichier .pb temps réel
+        logger.info("Téléchargement du flux GTFS-RT...")
+        filename = fetch_transport_realtime()
+        file_path = os.path.join(DATA_DIR, filename)
+        logger.info(f"Fichier téléchargé : {filename}")
         
-        # 2. Parser les données GTFS
-        feed = gtfs_realtime_pb2.FeedMessage()
-        feed.ParseFromString(r_history.content)
-        history_entities = list(feed.entity)
+        # 2. Vérifier que les fichiers statiques existent
+        routes_file = os.path.join(STATIC_DATA_PATH, "routes.txt")
+        if not os.path.exists(routes_file):
+            logger.warning(f"Fichiers statiques GTFS manquants : {routes_file}")
+            logger.warning("La transformation ne peut pas être effectuée.")
+            logger.warning("Téléchargez les fichiers statiques GTFS depuis Trafiklab.")
+            return {"status": "incomplete", "reason": "missing_static_files", "file": filename}
         
-        logger.info(f"📡 {len(history_entities)} entités reçues de l'API")
+        # 3. Transformer les données
+        logger.info("Transformation des données...")
+        df_transformed = process_etl_transport_live(file_path, STATIC_DATA_PATH)
         
-        # 3. Récupérer les références
-        r_reference = call_rt_reference_api()
-        reference_routes = read_koda_reference_data(r_reference, "routes")
-        reference_trips = read_koda_reference_data(r_reference, "trips")
+        if df_transformed.empty:
+            logger.warning("Aucune donnée de bus extraite du flux temps réel")
+            return {"status": "empty", "file": filename}
         
-        # 4. Filtrer par bus
-        filtered_data = filter_by_bus_route(
-            BUS_NUMBER, 
-            reference_routes, 
-            reference_trips, 
-            history_entities, 
-            MAX_BUS_PER_HOUR
-        )
+        logger.info(f"{len(df_transformed)} lignes de bus extraites")
         
-        logger.info(f"🚌 {len(filtered_data)} observations pour bus {BUS_NUMBER}")
+        # 4. Sauvegarder en parquet temporaire
+        parquet_path = file_path.replace(".pb", "_processed.parquet")
+        df_transformed.to_parquet(parquet_path, index=False)
         
-        # 5. Transformer
-        data_transformed = transform_S3_to_neon(filtered_data)
+        # 5. Charger dans Neon (TRUNCATE + INSERT via if_exists='replace')
+        logger.info("Chargement vers Neon (stg_transport_realtime)...")
+        load_parquet_to_neon(parquet_path, "stg_transport_realtime", if_exists="replace")
         
-        # 6. Charger (TRUNCATE + INSERT)
-        load_parquet_to_neon("stg_transport_realtime", data_transformed, realtime=True)
-        
-        logger.info("✅ Transport realtime mis à jour")
-        return {"count": len(filtered_data)}
+        logger.info("Transport realtime mis a jour")
+        return {"status": "success", "count": len(df_transformed), "file": filename}
         
     except Exception as e:
-        logger.error(f"❌ Échec fetch transport realtime : {e}")
+        logger.error(f"Echec fetch transport realtime : {e}")
         raise
 
 
