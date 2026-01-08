@@ -1,37 +1,21 @@
 from pydantic import BaseModel
-from typing import List
+from typing import Optional
 
-# Structure pour les données d'entrée
+# Structure pour les données d'entrée - Simplifiée pour l'utilisateur
 class PredictionInput(BaseModel):
-    # Transport & Calendaire
+    # Ce que l'utilisateur doit fournir
     direction_id: int
     month: int
     day: int
     hour: int
     day_of_week: int
     
-    # Météo
-    weather_code: int
-    temperature_2m: float
-    precipitation: float
-    rain: float
-    snowfall: float
-    wind_speed_10m: float
-    wind_gusts_10m: float
-    cloud_cover: int
-    dew_point_2m: float
-    wind_direction_10m: int
+    # Valeurs par défaut
+    bus_nbr: str = "541"
+    stop_sequence: int = 1
     
-    # Contexte
-    soleil_leve: int
-    risque_gel_pluie: int
-    risque_gel_neige: int
-    neige_fondue: int
-    est_weekend: int
-    est_jour_ferie: int
-    vacances_scolaires: int
-
 # Structure pour les données de sortie
 class PredictionOutput(BaseModel):
-    prediction: float
-    probability: float = None
+    prediction_P50: float
+    prediction_P80: float
+    prediction_P90: float

@@ -1,17 +1,34 @@
-from fastapi import FastAPI, Depends
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .schemas import PredictionInput, PredictionOutput
 from .model import model_instance
 from .database import SessionLocal, engine, get_db
 from . import data_structure
+from .weather_utils import get_weather_features, get_calendar_features
 
-# Création des tables au démarrage (si elles n'existent pas)
-data_structure.Base.metadata.create_all(bind=engine)
+# Configuration des logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Création des tables au démarrage de l'application
+    logger.info("Vérification et création des tables de base de données...")
+    try:
+        data_structure.Base.metadata.create_all(bind=engine)
+        logger.info("Tables de base de données prêtes.")
+    except Exception as e:
+        logger.error(f"Erreur lors de la création des tables : {e}")
+    yield
+
 
 app = FastAPI(
     title="API Delay Forecast",
-    description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports parisiens en fonction de la météo et des conditions de circulation",
-    version="0.1.0"
+    description="Interface FastAPI pour un modèle de Machine Learning de prévision de retard des transports de Stockholm en fonction de la météo et des conditions de circulation",
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 @app.get("/")
@@ -21,27 +38,44 @@ async def root():
 @app.post("/predict", response_model=PredictionOutput)
 async def predict(data: PredictionInput, db: Session = Depends(get_db)):
     
-    # On transforme l'objet Pydantic en dictionnaire d'un coup
+    # On transforme l'objet Pydantic en dictionnaire
     features = data.model_dump()
+    
     print(f"--- Nouvelle requête reçue ---")
-    print(f"Données d'entrée: {features}")
+    print(f"Données utilisateur: month={data.month}, day={data.day}, hour={data.hour}, direction={data.direction_id}")
     
-    # 1. Prédiction
-    prediction = model_instance.predict(features)
-    print(f"Prédiction calculée: {prediction}")
+    # Complétion automatique des features manquantes
+    # 1. Calendrier
+    cal_feats = get_calendar_features(data.month, data.day, data.day_of_week)
+    features.update(cal_feats)
+        
+    # 2. Météo - Récupération systématique
+    print("Récupération des données météo...")
+    try:
+        meteo_feats = get_weather_features(data.month, data.day, data.hour)
+        features.update(meteo_feats)
+    except Exception as e:
+        print(f"Erreur météo : {e}")
+        raise HTTPException(status_code=503, detail=str(e))
     
-    # 2. Log en DB (plus propre avec les kwargs)
-    db_log = data_structure.PredictionLog(**features, prediction=prediction)
+    # 3. Prédiction
+    try:
+        predictions = model_instance.predict(features)
+        print(f"Prédictions calculées: {predictions}")
+    except Exception as e:
+        print(f"Erreur lors de la prédiction : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    # 4. Log en DB
+    db_log = data_structure.PredictionLog(**features, **predictions)
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
     print(f"Log enregistré en base de données (ID: {db_log.id})")
     print(f"-------------------------------")
     
-    return PredictionOutput(prediction=prediction)
+    return PredictionOutput(**predictions)
 
 if __name__ == "__main__":
     import uvicorn
-    # On crée les tables uniquement quand on lance l'app directement (pas pendant les tests)
-    data_structure.Base.metadata.create_all(bind=engine)
     uvicorn.run(app, host="0.0.0.0", port=8000)

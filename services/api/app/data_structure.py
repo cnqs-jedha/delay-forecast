@@ -8,7 +8,9 @@ class PredictionLog(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Transport et Calendaire
+    bus_nbr = Column(String)
     direction_id = Column(Integer)
+    stop_sequence = Column(Integer)
     month = Column(Integer)
     day = Column(Integer)
     hour = Column(Integer)
@@ -35,5 +37,7 @@ class PredictionLog(Base):
     est_jour_ferie = Column(Integer)
     vacances_scolaires = Column(Integer)
     
-    prediction = Column(Float)
+    prediction_P50 = Column(Float)
+    prediction_P80 = Column(Float)
+    prediction_P90 = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)

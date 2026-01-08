@@ -12,6 +12,7 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
 # On retire les guillemets si présents
 if SQLALCHEMY_DATABASE_URL:
+    
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.strip("'\"")
 
 if SQLALCHEMY_DATABASE_URL is None:
