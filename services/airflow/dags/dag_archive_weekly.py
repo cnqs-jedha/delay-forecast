@@ -103,14 +103,13 @@ def task_ingestion_meteo_archive(**context):
     Utilise les dates calculées automatiquement par Airflow.
     """
     from call_api_meteo import fetch_weather_data
-    # TODO: Implémenter upload S3 quand disponible
-    # from upload_s3 import send_to_S3
+    from upload_s3 import send_to_S3
     
     # Dates calculées depuis le contexte Airflow
     start_date, end_date = get_week_dates_from_context(context)
     execution_date = context.get('ds', 'unknown')
     
-    logger.info(f"[{execution_date}] Ingestion météo archive : {start_date} → {end_date}")
+    logger.info(f"[{execution_date}] Ingestion meteo archive : {start_date} -> {end_date}")
     
     try:
         # Appel API avec dates dynamiques
@@ -122,68 +121,69 @@ def task_ingestion_meteo_archive(**context):
             end_date=end_date
         )
         
-        # TODO: Sauvegarde sur S3 (backup) - décommenter quand disponible
-        # try:
-        #     send_to_S3(data, f"weather_archive_{start_date}_{end_date}")
-        #     logger.info("✅ Données sauvegardées sur S3")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Échec sauvegarde S3 (non bloquant) : {e}")
+        # Backup sur S3 (non bloquant)
+        try:
+            if send_to_S3(data, f"weather_archive_{start_date}_{end_date}"):
+                logger.info("Donnees meteo sauvegardees sur S3")
+        except Exception as e:
+            logger.warning(f"Echec sauvegarde S3 (non bloquant) : {e}")
         
         # Passer les données via XCom
         context['ti'].xcom_push(key='meteo_archive_data', value=data)
-        logger.info(f"✅ Météo archive récupérée ({start_date} → {end_date})")
+        logger.info(f"Meteo archive recuperee ({start_date} -> {end_date})")
         return data
     except Exception as e:
-        logger.error(f"❌ Échec ingestion météo archive : {e}")
+        logger.error(f"Echec ingestion meteo archive : {e}")
         raise
 
 
 def task_ingestion_meteo_forecast(**context):
     """
     Récupère les prévisions météo (J+7).
-    Les dates sont calculées automatiquement (aujourd'hui → J+7).
+    Les dates sont calculées automatiquement (aujourd'hui -> J+7).
     """
     from call_api_meteo import fetch_weather_data
+    from upload_s3 import send_to_S3
     
     execution_date = context.get('ds', 'unknown')
-    logger.info(f"[{execution_date}] Ingestion météo forecast")
+    logger.info(f"[{execution_date}] Ingestion meteo forecast")
     
     try:
-        # Forecast : dates automatiques (J → J+7)
+        # Forecast : dates automatiques (J -> J+7)
         data = fetch_weather_data(
             LAT, LON,
             filename=f"weather_forecast_{execution_date}.json",
             mode="forecast"
         )
         
-        # TODO: Sauvegarde sur S3 (backup) - décommenter quand disponible
-        # try:
-        #     send_to_S3(data, f"weather_forecast_{execution_date}")
-        # except Exception as e:
-        #     logger.warning(f"⚠️ Échec sauvegarde S3 : {e}")
+        # Backup sur S3 (non bloquant)
+        try:
+            if send_to_S3(data, f"weather_forecast_{execution_date}"):
+                logger.info("Donnees forecast sauvegardees sur S3")
+        except Exception as e:
+            logger.warning(f"Echec sauvegarde S3 : {e}")
         
         context['ti'].xcom_push(key='meteo_forecast_data', value=data)
-        logger.info("✅ Météo forecast récupérée")
+        logger.info("Meteo forecast recuperee")
         return data
     except Exception as e:
-        logger.error(f"❌ Échec ingestion météo forecast : {e}")
+        logger.error(f"Echec ingestion meteo forecast : {e}")
         raise
 
 
 def task_ingestion_transport_archive(**context):
     """
-    Récupère les données transport historiques pour la semaine.
-    Télécharge jour par jour pour la période.
+    Recupere les donnees transport historiques pour la semaine.
+    Telecharge jour par jour pour la periode.
     """
     from call_api_transport import fetch_transport_koda
-    # TODO: Implémenter upload S3 quand disponible
-    # from upload_s3 import send_to_S3
+    from upload_s3 import send_to_S3
     
     # Dates calculées depuis le contexte Airflow
     start_date, end_date = get_week_dates_from_context(context)
     execution_date = context.get('ds', 'unknown')
     
-    logger.info(f"[{execution_date}] Ingestion transport archive : {start_date} → {end_date}")
+    logger.info(f"[{execution_date}] Ingestion transport archive : {start_date} -> {end_date}")
     
     try:
         # Télécharger chaque jour de la période
@@ -197,24 +197,25 @@ def task_ingestion_transport_archive(**context):
             try:
                 filename = fetch_transport_koda(date_str)
                 files.append(filename)
-                logger.info(f"  📥 {date_str} OK → {filename}")
+                logger.info(f"  {date_str} OK -> {filename}")
                 
-                # TODO: Sauvegarde sur S3 - décommenter quand disponible
-                # try:
-                #     send_to_S3(filename, f"transport_archive_{date_str}")
-                # except Exception as e:
-                #     logger.warning(f"  ⚠️ S3 {date_str} : {e}")
+                # Backup sur S3 (non bloquant)
+                try:
+                    if send_to_S3(filename, f"transport_archive_{date_str}"):
+                        logger.info(f"    -> S3 OK")
+                except Exception as e:
+                    logger.warning(f"    S3 {date_str} : {e}")
                     
             except Exception as e:
-                logger.warning(f"  ❌ {date_str} échoué : {e}")
+                logger.warning(f"  {date_str} echoue : {e}")
             
             current += timedelta(days=1)
         
         context['ti'].xcom_push(key='transport_archive_files', value=files)
-        logger.info(f"✅ Transport archive : {len(files)} jours récupérés")
+        logger.info(f"Transport archive : {len(files)} jours recuperes")
         return files
     except Exception as e:
-        logger.error(f"❌ Échec ingestion transport archive : {e}")
+        logger.error(f"Echec ingestion transport archive : {e}")
         raise
 
 
