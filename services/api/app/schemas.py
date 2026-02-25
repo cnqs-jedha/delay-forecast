@@ -19,3 +19,8 @@ class PredictionOutput(BaseModel):
     prediction_P50: float
     prediction_P80: float
     prediction_P90: float
+
+# Structure pour les données ground truth
+class GroundTruthInput(BaseModel):
+    prediction_log_id: int
+    actual_delay: float
