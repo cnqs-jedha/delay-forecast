@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from .schemas import PredictionInput, PredictionOutput
+from .schemas import PredictionInput, PredictionOutput, GroundTruthInput
 from .model import model_instance
 from .database import SessionLocal, engine, get_db
 from . import data_structure
@@ -75,6 +75,26 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
     print(f"-------------------------------")
     
     return PredictionOutput(**predictions)
+
+@app.post("/ground-truth")
+async def add_ground_truth(data: GroundTruthInput, db: Session = Depends(get_db)):
+    # Vérifier que la prédiction existe
+    prediction = db.query(data_structure.PredictionLog).filter(
+        data_structure.PredictionLog.id == data.prediction_log_id
+    ).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail=f"Prediction log {data.prediction_log_id} introuvable")
+    
+    # Insérer la ground truth
+    gt = data_structure.GroundTruth(
+        prediction_log_id=data.prediction_log_id,
+        actual_delay=data.actual_delay
+    )
+    db.add(gt)
+    db.commit()
+    db.refresh(gt)
+    logger.info(f"Ground truth enregistrée (ID: {gt.id}) pour prediction_log {data.prediction_log_id}")
+    return {"id": gt.id, "prediction_log_id": gt.prediction_log_id, "actual_delay": gt.actual_delay}
 
 if __name__ == "__main__":
     import uvicorn
