@@ -41,3 +41,11 @@ class PredictionLog(Base):
     prediction_P80 = Column(Float)
     prediction_P90 = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+class GroundTruth(Base):
+    __tablename__ = "ground_truth"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_log_id = Column(Integer, nullable=False)
+    actual_delay = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
