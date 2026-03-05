@@ -46,15 +46,26 @@ def sync_ground_truth_optimized():
 
         # Chexk de performance : on calcule le MAE uniquement si de nouvelles données ont été insérées
         if rows_inserted > 0:
-            check_mae_query = """
+            check_mae_weekly_query = """
             SELECT AVG(ABS(p."prediction_P50" - g.actual_delay)) as mae
             FROM prediction_logs p
             JOIN ground_truth g ON p.id = g.prediction_log_id
             WHERE p.bus_nbr = '541';
             """
-            cur.execute(check_mae_query)
-            mae = cur.fetchone()[0]
-            print(f"MAE actuelle sur la ligne 541 : {mae:.2f} secondes")
+            cur.execute(check_mae_weekly_query)
+            mae_weekly = cur.fetchone()[0]
+            print(f"MAE actuelle sur la ligne 541 : {mae_weekly:.2f} secondes")
+
+            check_mae_avg_query = """
+            SELECT AVG(ABS(p."prediction_P50")) as mae
+            FROM prediction_logs p
+            WHERE p.bus_nbr = '541';
+            """
+            cur.execute(check_mae_avg_query)
+            mae_avg = cur.fetchone()[0]
+            print(f"MAE actuelle sur la ligne 541 : {mae_avg:.2f} secondes")
+
+            print(mae_weekly/mae_avg)
 
     except Exception as e:
         print(f" Erreur lors de l'exécution : {e}")
@@ -68,20 +79,24 @@ if __name__ == "__main__":
     sync_ground_truth_optimized()
 
 
-
-"""SELECT 
-    p.id, 
-    p."prediction_P50", 
-    r.departure_delay
-FROM prediction_logs p
-JOIN stg_transport_realtime r ON 
-    TRIM(p.bus_nbr::text) = TRIM(r.bus_nbr::text)
-    -- On force le cast en INT pour être sûr que 01 = 1
-    AND p.direction_id::int = r.direction_id::int 
-    AND p.stop_sequence::int = r.stop_sequence::int
-    AND p.month = EXTRACT(MONTH FROM r.timestamp_rounded)
-    -- On harmonise le DOW (Day Of Week)
-    AND p.day_of_week::int = EXTRACT(DOW FROM r.timestamp_rounded)::int
-    -- On gère le décalage horaire éventuel (ex: + 1 hour si besoin)
-    AND p.hour = EXTRACT(HOUR FROM r.timestamp_rounded AT TIME ZONE 'UTC')
-WHERE p.id = 999;"""
+##Permet d'insérer une ligne fictive dans prediction_logs pour des tests
+# """
+# INSERT INTO prediction_logs (
+#     id, bus_nbr, direction_id, stop_sequence, 
+#     month, day_of_week, hour, timestamp, 
+#     "prediction_P50", "prediction_P90"
+# )
+# SELECT 
+#     235, -- ID de test
+#     bus_nbr, 
+#     direction_id, 
+#     stop_sequence, 
+#     EXTRACT(MONTH FROM timestamp_rounded),
+#     EXTRACT(DOW FROM timestamp_rounded),
+#     EXTRACT(HOUR FROM timestamp_rounded),
+#     timestamp_rounded, -- On copie le timestamp exact
+#     -12.4, -- Une prédiction fictive de 10s
+#     62.346  -- P90 fictif
+# FROM stg_transport_realtime 
+# WHERE bus_nbr = '541' 
+# LIMIT 1;"""
