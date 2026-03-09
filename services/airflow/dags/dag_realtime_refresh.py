@@ -53,9 +53,6 @@ realtime_task_args = {
     "execution_timeout": timedelta(minutes=3),  # Timeout court pour ne pas bloquer
 }
 
-# Configuration bus
-BUS_NUMBER = "541"
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FONCTIONS DES TÂCHES

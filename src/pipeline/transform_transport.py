@@ -4,47 +4,82 @@ import io
 import py7zr
 import tempfile
 import shutil
-import copy
 import logging
 from pathlib import Path
 from google.transit import gtfs_realtime_pb2
-from google.protobuf.message import DecodeError
 from dotenv import load_dotenv
 
-# Configuration Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("gtfs")
 
 load_dotenv()
 
-# Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-# On pointe vers data/sweden_data comme tu l'as précisé
-STATIC_DATA_DIR = os.path.join(DATA_DIR, "sweden_data") 
+STATIC_DATA_DIR = os.path.join(DATA_DIR, "sweden_data")
+
+# POC : filtrer sur la ligne 541 uniquement. Mettre a None pour tout garder.
+POC_BUS_FILTER = "541"
+
+FINAL_COLUMNS = [
+    "direction_id", "stop_sequence", "arrival_delay",
+    "departure_delay", "timestamp_rounded", "hour", "bus_nbr",
+]
+
+
+def _build_trip_filter(static_data_dir, bus_filter):
+    """Pre-charge le mapping trip_id -> (direction_id, bus_nbr) pour filtrage rapide."""
+    trips = pd.read_csv(os.path.join(static_data_dir, "trips.txt"), dtype=str,
+                         usecols=["trip_id", "route_id", "direction_id"])
+    routes = pd.read_csv(os.path.join(static_data_dir, "routes.txt"), dtype=str,
+                          usecols=["route_id", "route_short_name"])
+
+    merged = trips.merge(routes, on="route_id", how="left")
+    if bus_filter:
+        merged = merged[merged["route_short_name"] == bus_filter]
+
+    lookup = {}
+    for _, r in merged.iterrows():
+        tid = str(r["trip_id"]).strip()
+        lookup[tid] = {
+            "direction_id": r["direction_id"],
+            "bus_nbr": r["route_short_name"],
+        }
+    return lookup
+
 
 def process_etl_transport(filename, batch_size=200):
+    """Extrait une archive .7z KoDa et retourne un DataFrame au schema cible."""
+
     input_path = os.path.join(DATA_DIR, filename)
-    
+
+    # Pre-charger le filtre trip_id pour ne garder que le bus cible en memoire
+    trip_lookup = _build_trip_filter(STATIC_DATA_DIR, POC_BUS_FILTER)
+    logger.info(f"{len(trip_lookup)} trip_ids pour le bus {POC_BUS_FILTER or 'ALL'}")
+
     with open(input_path, "rb") as f:
         archive_bytes = io.BytesIO(f.read())
 
     tmpdir = tempfile.mkdtemp(prefix="koda_")
     tmp = Path(tmpdir)
-    
-    # CHANGEMENT MAJEUR : On ne stocke plus all_entities
-    rows = [] 
+
+    rows = []
     bad_files = []
     feed = gtfs_realtime_pb2.FeedMessage()
 
     archive_bytes.seek(0)
     with py7zr.SevenZipFile(archive_bytes, mode="r") as z:
-        #candidates = [n for n in z.getnames() if n.lower().endswith(".pb")]
-        candidates = [n for n in z.getnames() if n.lower().endswith(".pb")][:1000]
+        all_pb = [n for n in z.getnames() if n.lower().endswith(".pb")]
+    # ~3 fichiers/heure × 24h = ~72 fichiers : couverture horaire complete, leger en RAM
+    MAX_PB = 72
+    step = max(1, len(all_pb) // MAX_PB)
+    candidates = all_pb[::step]
+    logger.info(f"{len(all_pb)} fichiers .pb, {len(candidates)} retenus (step={step})")
 
     for i in range(0, len(candidates), batch_size):
-        batch = candidates[i:i+batch_size]
-        logger.info(f"Batch {i + 1} / {len(candidates)}")
+        batch = candidates[i:i + batch_size]
+        if i % 1000 == 0:
+            logger.info(f"Batch {i + 1} / {len(candidates)}")
 
         try:
             archive_bytes.seek(0)
@@ -59,89 +94,73 @@ def process_etl_transport(filename, batch_size=200):
                 raw = p.read_bytes()
                 feed.Clear()
                 feed.ParseFromString(raw)
-                
-                # ON EXTRAIT TOUT DE SUITE LES DONNÉES (Plus besoin de deepcopy)
+
                 for e in feed.entity:
                     if e.HasField("trip_update"):
                         tu = e.trip_update
+                        tid = str(tu.trip.trip_id).strip()
+                        info = trip_lookup.get(tid)
+                        if info is None:
+                            continue
+                        ts = tu.timestamp if tu.timestamp else None
                         for stu in tu.stop_time_update:
                             rows.append({
-                                "entity_id": e.id,
-                                "trip_id": tu.trip.trip_id,
-                                "route_id": tu.trip.route_id,
+                                "direction_id": info["direction_id"],
+                                "bus_nbr": info["bus_nbr"],
                                 "stop_sequence": stu.stop_sequence,
-                                "stop_id": stu.stop_id,
-                                "stop_arrival_delay": stu.arrival.delay if stu.HasField("arrival") else None,
-                                "timestamp": tu.timestamp if tu.timestamp else None
+                                "arrival_delay": stu.arrival.delay if stu.HasField("arrival") else None,
+                                "departure_delay": stu.departure.delay if stu.HasField("departure") else None,
+                                "timestamp": ts,
                             })
-            except Exception as e:
-                bad_files.append((name, str(e)))
+            except Exception as exc:
+                bad_files.append((name, str(exc)))
             finally:
-                if p.exists(): p.unlink()
+                if p.exists():
+                    p.unlink()
 
     shutil.rmtree(tmpdir, ignore_errors=True)
 
-    # 4. Création du DataFrame
     logger.info(f"Création du DataFrame avec {len(rows)} lignes...")
     df = pd.DataFrame(rows)
-    # On vide la liste rows pour libérer de la mémoire
     rows = []
 
-# 5. Merges Statiques
-    logger.info("Merges GTFS Statiques...")
-    try:
-        trips = pd.read_csv(os.path.join(STATIC_DATA_DIR, "trips.txt"), dtype=str)
-        routes = pd.read_csv(os.path.join(STATIC_DATA_DIR, "routes.txt"), dtype=str)
-        
-        # Sécurité : tout en string
-        df['trip_id'] = df['trip_id'].astype(str)
-        
-        # Merge 1 : Récupérer le route_id depuis trips si manquant
-        df = df.merge(trips[['trip_id', 'route_id']], on="trip_id", how="left", suffixes=('', '_static'))
-        df['route_id'] = df['route_id'].fillna(df['route_id_static'])
-        
-        # Merge 2 : Récupérer les infos de la route
-        df = df.merge(routes[['route_id', 'route_short_name', 'route_type']], on="route_id", how="left")
-        
-        # --- LE FIX : DIAGNOSTIC ---
-        logger.info(f"Types de transport trouvés : {df['route_type'].unique()}")
-        
-        # On ne filtre QUE SI on trouve des bus, sinon on garde tout pour ne pas avoir 0 lignes
-        if '700' in df['route_type'].values:
-            df = df[df["route_type"] == "700"]
-            logger.info("Filtre Bus (700) appliqué.")
-        else:
-            logger.warning("Aucun bus '700' trouvé. On garde toutes les données pour éviter le 0.")
-            
-    except Exception as e:
-        logger.error(f"Erreur lors des merges : {e}")
+    if df.empty:
+        logger.warning("Aucune donnée extraite de l'archive.")
+        return df
 
-    # 6. Time formatting pour Neon DB
-    if 'timestamp' in df.columns and not df.empty:
-        df['timestamp_dt'] = pd.to_datetime(df['timestamp'], unit='s')
-        df['timestamp_rounded'] = df['timestamp_dt'].dt.floor('h').dt.tz_localize(None)
+    # --- Calculs temporels (conversion UTC -> heure locale Stockholm) ---
+    df["timestamp_dt"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+    df["timestamp_dt"] = df["timestamp_dt"].dt.tz_convert("Europe/Stockholm")
+    df["timestamp_rounded"] = df["timestamp_dt"].dt.floor("h").dt.tz_localize(None)
+    df["hour"] = df["timestamp_rounded"].dt.hour
 
-    print(df.columns)
-    
-    # Sauvegarde Parquet
+    # --- Deduplication : 1 ligne par (direction, stop, heure arrondie) ---
+    group_cols = ["direction_id", "stop_sequence", "timestamp_rounded", "hour", "bus_nbr"]
+    df = df.groupby(group_cols, as_index=False).agg(
+        arrival_delay=("arrival_delay", "median"),
+        departure_delay=("departure_delay", "median"),
+    )
+    logger.info(f"{len(df)} lignes apres deduplication")
+
+    # --- Selection finale ---
+    for col in FINAL_COLUMNS:
+        if col not in df.columns:
+            logger.error(f"Colonne manquante apres transformation : {col}")
+            return pd.DataFrame()
+
+    df = df[FINAL_COLUMNS].copy()
+
     output_filename = filename.replace(".7z", "_processed.parquet")
     output_path = os.path.join(DATA_DIR, output_filename)
     df.to_parquet(output_path, index=False)
-    
-    logger.info(f" Terminé ! {len(df)} lignes de bus sauvegardées.")
+
+    logger.info(f"{len(df)} lignes extraites (bus {POC_BUS_FILTER or 'ALL'}).")
     return df
+
 
 if __name__ == "__main__":
     from datetime import datetime, timedelta
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # MODE MANUEL - Décommenter pour traiter une date spécifique
-    # ═══════════════════════════════════════════════════════════════════════
-    # process_etl_transport("transport_koda_2024-01-01.7z", batch_size=100)
-    
-    # ═══════════════════════════════════════════════════════════════════════
-    # MODE AUTOMATIQUE - Traite les données de la veille
-    # ═══════════════════════════════════════════════════════════════════════
+
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
     filename = f"transport_koda_{yesterday}.7z"
     print(f"Traitement de : {filename}")
