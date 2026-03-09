@@ -249,7 +249,7 @@ def task_etl_meteo(**context):
             df_transformed.to_parquet(parquet_path, index=False)
             
             # Charger vers Neon
-            load_parquet_to_neon(parquet_path, "stg_weather_archive")
+            load_parquet_to_neon(parquet_path, "stg_weather_archive", if_exists="append")
             logger.info("Meteo archive -> Neon OK")
         except Exception as e:
             logger.error(f"ETL meteo archive : {e}")
