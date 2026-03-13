@@ -242,8 +242,8 @@ Docker
 
 ## :compass: Roadmap
 
-* [ ] Retraining automatique
-* [ ] Monitoring du drift
+* [x] Retraining automatique
+* [x] Monitoring du drift
 * [ ] Inclusion nouvelles API
 * [ ] Authentification API
 * [ ] Déploiement cloud
