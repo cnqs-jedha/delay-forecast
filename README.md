@@ -97,7 +97,6 @@ delay-forecast/
 3. Appel client POST /predict
 4. Validation des données
 5. Prédiction retournée en JSON
-
 Documentation interactive :
 
 ```bash
