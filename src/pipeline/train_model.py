@@ -18,7 +18,7 @@ db_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
 import tempfile
-mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_tracking_uri("http://mlflow:5000")
 experiment_name = "Retards_transports_Stockholm_v8"
 
 # Assurer un dossier local pour les artifacts si le serveur est mal configuré

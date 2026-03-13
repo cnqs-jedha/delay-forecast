@@ -12,9 +12,11 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 import sys
 import os
+import pandas as pd
 import smtplib
 import psycopg2
 import logging
+import requests
 from email.mime.text import MIMEText
 
 sys.path.insert(0, "/opt/project/pipeline")
@@ -40,14 +42,19 @@ def compute_drift():
     cur = conn.cursor()
 
     try:
+        # On utilise g.created_at (date de synchro) mais on élargit 
+        # la fenêtre pour être sûr d'inclure tes données du 7 mars.
+        
+        # 1. MAE RÉCENTE (On regarde les synchros des 14 derniers jours pour être large)
         cur.execute("""
             SELECT AVG(ABS(p."prediction_P50" - g.actual_delay))
             FROM prediction_logs p
             JOIN ground_truth g ON p.id = g.prediction_log_id
-            WHERE g.created_at >= NOW() - INTERVAL '7 days'
+            WHERE g.created_at >= NOW() - INTERVAL '14 days'
         """)
         mae_recent = cur.fetchone()[0]
 
+        # 2. MAE RÉFÉRENCE (30 jours)
         cur.execute("""
             SELECT AVG(ABS(p."prediction_P50" - g.actual_delay))
             FROM prediction_logs p
@@ -56,9 +63,10 @@ def compute_drift():
         """)
         mae_reference = cur.fetchone()[0]
 
+        # 3. ÉCHANTILLONS RÉCENTS
         cur.execute("""
             SELECT COUNT(*) FROM ground_truth
-            WHERE created_at >= NOW() - INTERVAL '7 days'
+            WHERE created_at >= NOW() - INTERVAL '14 days'
         """)
         sample_count = cur.fetchone()[0]
 
@@ -90,6 +98,66 @@ def compute_drift():
         cur.close()
         conn.close()
 
+
+def trigger_evidently_monitoring():
+    # 1. Extraction des données depuis Neon
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    conn = psycopg2.connect(DATABASE_URL)
+    
+    # On récupère les données avec leur réalité (ground truth)
+    # On limite à 5000 pour ne pas surcharger l'API
+    query = """
+        SELECT p.*, g.actual_delay
+        FROM prediction_logs p
+        JOIN ground_truth g ON p.id = g.prediction_log_id
+        ORDER BY g.created_at DESC
+        LIMIT 5000;
+    """
+    df = pd.read_sql(query, conn)
+    conn.close()
+
+    if df.empty:
+        print("Pas de données dans ground_truth, monitoring annulé.")
+        return
+
+    # pour que le JSON puisse les accepter
+    for col in df.select_dtypes(include=['datetime64', 'datetimetz']).columns:
+        df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # --- NETTOYAGE RENFORCÉ ---
+    # Étape A : Remplacer les infinis par 0
+    df = df.replace([float('inf'), float('-inf')], 0)
+    
+    # Étape B : Convertir les colonnes numériques en float standard (évite les types numpy bizarres)
+    # Puis remplir les NaN avec une valeur sûre (0 ou null)
+    df = df.fillna(0) # On remplace tout ce qui est vide par 0 pour le calcul de MAE
+    
+    # Étape C : Sécurité ultime avant conversion dict
+    data_records = df.to_dict(orient="records")
+    # ----------------------------------
+    # 2. Préparation du payload pour Evidently
+    # On transforme le DataFrame en liste de dictionnaires (JSON compatible)
+    data_payload = {"data": df.to_dict(orient="records")}
+
+    # 3. Envoi au service Monitoring (Utilise le nom du service Docker)
+    MONITORING_URL = "http://evidently:8001" # Ajuste selon ton docker-compose
+    
+    try:
+        # On définit d'abord ces données comme la nouvelle référence
+        requests.post(f"{MONITORING_URL}/reference", json=data_payload)
+        
+        # On génère le rapport de drift
+        response = requests.post(f"{MONITORING_URL}/drift/report", json=data_payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Rapport généré : {result['report_filename']}")
+            print(f"Drift détecté : {result['drift_detected']}")
+        else:
+            print(f"Erreur API : {response.text}")
+            
+    except Exception as e:
+        print(f"Erreur de connexion au service Monitoring : {e}")
 
 def send_alert(**context):
     """Envoie un email d'alerte si un drift est detecte."""
@@ -163,9 +231,19 @@ with DAG(
         python_callable=compute_drift,
     )
 
+    t_evidently = PythonOperator(
+        task_id="generate_evidently_reports",
+        python_callable=trigger_evidently_monitoring,
+    )
+
     t_alert = PythonOperator(
         task_id="send_alert",
         python_callable=send_alert,
     )
 
-    t_sync >> t_compute >> t_alert
+    # --- Logique de dépendances ---
+    # 1. On synchronise d'abord
+    # 2. On lance le calcul du drift ET le rapport détaillé en parallèle
+    # 3. L'alerte email part une fois le calcul terminé
+    t_sync >> [t_compute, t_evidently]
+    t_compute >> t_alert

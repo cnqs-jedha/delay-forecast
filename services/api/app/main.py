@@ -1,4 +1,6 @@
 import logging
+import os
+import mlflow
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -8,6 +10,9 @@ from .database import SessionLocal, engine, get_db
 from . import data_structure
 from .weather_utils import get_weather_features, get_calendar_features
 
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+mlflow.set_experiment("API_Production_Inference")
 # Configuration des logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,12 +63,18 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
         print(f"Erreur météo : {e}")
         raise HTTPException(status_code=503, detail=str(e))
     
-    # 3. Prédiction
+    # 3. Prédiction et tracking mlflow
     try:
-        predictions = model_instance.predict(features)
-        print(f"Prédictions calculées: {predictions}")
+        if mlflow.active_run():
+            mlflow.end_run()
+        # On peut logger chaque appel d'API comme une "inférence" dans MLflow
+        with mlflow.start_run(run_name="API_Inference"):
+            predictions = model_instance.predict(features)
+            mlflow.log_params(data.model_dump()) # On log ce que l'utilisateur a envoyé
+            mlflow.log_metric("predicted_delay", predictions.get("prediction_P50", 0))
+
     except Exception as e:
-        print(f"Erreur lors de la prédiction : {e}")
+        logger.error(f"Erreur lors de la prédiction : {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     # 4. Log en DB
