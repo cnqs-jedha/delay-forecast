@@ -1,69 +1,153 @@
-# Delay Forecast — POC MLOps
+# :bus: Delay Forecast — POC MLOps
 
-POC de prédiction des retards de train en fonction de la météo (et contexte : trafic, jours fériés).
+Ce projet est un POC MLOps de prédiction de retards de transports en commun en fonction de contextes externes (météo, jours fériés, temporalité, etc.).
 
-## Stack
-Airflow • MLflow • FastAPI • Docker Compose • GitHub Actions • Neon Postgres • S3
+Il implémente une boucle de feedback complète : de l'ingestion automatisée au monitoring du drift de performance en production.
 
----
+📍 Les données utilisées concernent les transports en commun de la ville de Stockholm.
 
-## 🚀 Run local
+## :rocket: Objectif du projet
+
+Le projet couvre l’ensemble du cycle de vie Machine Learning :
+
+1. Ingestion & ETL : Pipelines automatisés (Airflow) vers Neon Postgres & S3.
+2. Experiment Tracking : Suivi des entraînements et versioning des modèles (MLflow).
+3. Model Serving : API REST haute performance (FastAPI) avec enrichissement météo temps réel.
+4. Observabilité : Tracking systématique des prédictions et boucle de feedback (Ground Truth).
+5. Monitoring : Analyse hebdomadaire du drift de données et de performance (Evidently AI).
+6. CI/CD : Validation automatique du code et des images (GitHub Actions).
+
+## :brain: Flux global du projet
+
+```text
+         Appels API
+            ↓
+   Stockage données brutes
+            (S3)
+            ↓
+        Airflow DAG
+     (ingestion / ETL)
+            ↓
+     PostgreSQL (Neon)
+            ↓
+     Entraînement ML
+      (MLflow tracking)
+            ↓
+      Modèles + métriques
+            ↓
+     API FastAPI → Prédictions
+            ↓
+      Monitoring / logs
+            ↓
+        Evidently → Analyse du drift
+        (monitoring)      
+
+```
+
+## :building_construction: Architecture globale
 
 ```bash
-# Première installation uniquement (si .env n'existe pas)
+delay-forecast/
+├── docker-compose.yml
+├── Makefile
+├── .env.example
+├── libs/
+│   ├── db/              # Connexion base de données (Neon)
+│   └── storage/         # Connexion stockage S3
+├── services/
+│   ├── airflow/
+│   │   ├── dags/        # Définition des DAGs
+│   │   ├── tasks/       # Tâches ETL et training
+│   │   └── scripts/
+│   ├── api/             # API FastAPI
+│   └── mlflow/          # Service MLflow
+├── src/                 # Code partagé (features, utils)
+├── tests/               # Tests unitaires et ETL
+├── mlruns/              # Expériences MLflow
+└── mlruns_artifacts/    # Artefacts modèles
+
+```
+
+### Composants
+
+| Technologie       | Rôle                                              |
+| ----------------- | ------------------------------------------------- |
+| Airflow           | Orchestration des pipelines ETL et d’entraînement |
+| MLflow            | Suivi des expériences, métriques et modèles       |
+| FastAPI           | API REST de prédiction                            |
+| PostgreSQL (Neon) | Stockage des données transformées                 |
+| S3                | Stockage des données brutes et artefacts ML       |
+| Docker Compose    | Environnement reproductible                       |
+| GitHub Actions    | Intégration continue (tests & qualité)            |
+| Evidently AI      | Calcul des métriques de Data drift                |
+
+### Interactions entre les modules
+
+| Étape          | Module source | Module cible | Description               | Fichier clé                  |
+| -------------- | ------------- | ------------ | ------------------------- | ---------------------------- |
+| Configuration  | `.env`        | Services     | Variables d’environnement | `.env`                       |
+| Orchestration  | Airflow DAG   | Tasks        | Définition du pipeline    | `services/airflow/dags/*.py` |
+| Ingestion      | Task ETL      | S3           | Stockage données brutes   | `tasks/ingest_etl.py`        |
+| Transformation | Task ETL      | PostgreSQL   | Nettoyage & features      | `tasks/transform.py`         |
+| Entraînement   | Task ML       | MLflow       | Training & métriques      | `tasks/train.py`             |
+| Registry       | MLflow        | MLflow       | Versioning modèle         | MLflow UI                    |
+| Serving        | FastAPI       | MLflow       | Chargement modèle prod    | `services/api/main.py`       |
+
+### Flux API de prédiction
+
+1. Démarrage de l’API FastAPI
+2. Chargement automatique du modèle en Production depuis MLflow
+3. Appel client POST /predict
+4. Validation des données
+5. Prédiction retournée en JSON
+Documentation interactive :
+
+```bash
+http://localhost:8000/docs
+```
+
+### MLFlow
+
+- **Interface Web** : <http://localhost:5000>
+- **Tracking URI (depuis les conteneurs)** : <http://mlflow:5000>
+- **Tracking URI (depuis l'hôte)** : <http://localhost:5000>
+
+MLFlow permet de :
+
+- comparer les runs,
+- analyser les métriques,
+- gérer les versions,
+- promouvoir un modèle de production
+
+### Monitoring et boucle de feedback
+
+Le projet implémente un système d'observabilité proactif :
+
+1. Tracking d'Inférence : Chaque appel à `/predict` enregistre les features d'entrée et la prédiction dans MLflow (metrics) et Postgres.
+
+Collecte de la Vérité (Ground Truth) : L'endpoint `/ground-truth` permet d'associer le retard réel observé à une prédiction passée.
+
+Détection du Drift : Le DAG `weekly_drift_detector` génère des rapports Evidently comparant les prédictions à la réalité pour détecter toute chute de précision (MAE/RMSE).
+
+## :atom_symbol: Installation
+
+Prérequis
+
+- Docker
+- Docker Compose
+- Make
+- Clé API Trafiklab (GTFS Regional Static)
+
+Etapes
+
+```bash
+git clone https://github.com/cnqs-jedha/delay-forecast.git
+cd delay-forecast
+# Configurer l'environnement
 cp .env.example .env
-# Puis renseigner les variables (voir section Configuration)
-
-# Télécharger les données GTFS statiques (une seule fois)
-python src/pipeline/download_gtfs_static.py
-
-# Démarrer les services
-make up
 ```
 
-### 📥 Données GTFS statiques (prérequis)
-
-Les fichiers GTFS statiques sont nécessaires pour le DAG `realtime_refresh` (mapping route_id → numéro de bus).
-
-```bash
-# Télécharger les fichiers GTFS pour Stockholm (SL)
-python src/pipeline/download_gtfs_static.py
-```
-
-**Prérequis :** 
-- Variable `GTFS_REGIONAL_STATIC_KEY` définie dans `.env`
-- Clé API obtenue gratuitement sur [Trafiklab](https://www.trafiklab.se/) (GTFS Regional → Static data)
-
-**Fichiers téléchargés** (dans `data/sweden_data/`) :
-- `routes.txt` — Liste des lignes de bus/métro
-- `stops.txt` — Liste des arrêts
-- `trips.txt` — Trajets planifiés
-- `stop_times.txt` — Horaires par arrêt
-
-> ℹ️ Ces fichiers changent rarement. Un seul téléchargement suffit pour un POC.
-
-### URLs des services
-
-| Service | URL | Description |
-|---------|-----|-------------|
-| Airflow | http://localhost:8080 | Orchestration des pipelines (admin/admin) |
-| MLflow | http://localhost:5000 | Tracking des expériences ML |
-| API | http://localhost:8000 | API de prédiction |
-| API Docs | http://localhost:8000/docs | Documentation Swagger |
-
-### Commandes utiles
-
-```bash
-make up       # Démarrer tous les services
-make down     # Arrêter et supprimer les conteneurs
-make logs     # Voir les logs en temps réel
-make ps       # État des conteneurs
-make rebuild  # Reconstruire les images sans cache
-```
-
----
-
-## 🔧 Configuration
+Renseigner les variables nécessaires dans `.env`
 
 ### Générer les clés Airflow
 
@@ -75,127 +159,139 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
----
+### Exécution
 
-## 📊 MLflow — Guide d'utilisation
-
-### Accès
-
-- **Interface Web** : http://localhost:5000
-- **Tracking URI (depuis les conteneurs)** : `http://mlflow:5000`
-- **Tracking URI (depuis l'hôte)** : `http://localhost:5000`
-
-### Connexion depuis Python
-
-```python
-import mlflow
-
-# Configurer la connexion
-mlflow.set_tracking_uri("http://mlflow:5000")  # Depuis un conteneur Docker
-# mlflow.set_tracking_uri("http://localhost:5000")  # Depuis l'hôte
-
-# Créer ou sélectionner une expérience
-mlflow.set_experiment("delay-forecast")
+```bash
+make up       # Démarrer tous les services
+make down     # Arrêter et supprimer les conteneurs
+make logs     # Voir les logs en temps réel
+make ps       # État des conteneurs
+make rebuild  # Reconstruire les images sans cache
 ```
 
-### Logger un entraînement
+### URLs des services
 
-```python
-import mlflow
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-import numpy as np
+| Service | URL | Description |
+| ------- | --- | ----------- |
+| Airflow | <http://localhost:8080> | Orchestration des pipelines (admin/admin) |
+| MLflow | <http://localhost:5000> | Tracking des expériences ML |
+| API | <http://localhost:8000> | API de prédiction |
+| API Docs | <http://localhost:8000/docs> | Documentation Swagger |
+| Evidently | <http://localhost:8001/docs> | Documentation |
+| Evidently | <http://localhost:8001/dashboard> | Visualisation des rapports|
 
-mlflow.set_tracking_uri("http://mlflow:5000")
-mlflow.set_experiment("delay-forecast")
+### Utilisation
 
-with mlflow.start_run(run_name="linear-regression-v1"):
-    # Paramètres
-    mlflow.log_param("model_type", "LinearRegression")
-    mlflow.log_param("features", ["temperature", "rain_mm", "wind_kmh"])
-    
-    # Entraînement
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    
-    # Métriques
-    y_pred = model.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    mlflow.log_metric("rmse", rmse)
-    mlflow.log_metric("r2", model.score(X_test, y_test))
-    
-    # Sauvegarder le modèle
-    mlflow.sklearn.log_model(
-        model, 
-        "model",
-        registered_model_name="delay-forecast-model"
-    )
+1. Lancer le DAG dans Airflow (Call API + Stockage + ETL + training)
+2. Vérifier les runs et métriques dans MLflow
+3. Mettre un modèle en stage Production
+4. Appeler l’API `/predict`
+
+### Exemple d'utilisation du pipeline
+
+1. Prédiction
+
+L'API enrichit automatique la requête avec les données météo actuelles avant de prédire
+
+Requête
+
+```http
+POST/predict
 ```
 
-### Charger un modèle (dans l'API)
+```json
+{
+    "direction_id" : 1,
+    "month": 3,
+    "day": 6,
+    "hour": 20,
+    "day_of_week": 4,
+    "bus_nbr": "541",
+    "stop_sequence": 13
+}
+```
 
-```python
-import mlflow
+Réponse
 
-# Charger la dernière version en Production
-model = mlflow.sklearn.load_model("models:/delay-forecast-model/Production")
+```json
+{
+    "prediction_P50": 37.77369710002,
+    "prediction_P80": 78.81960627238,
+    "prediction_P90": 123.9659931845
+}
+```
 
-# Ou une version spécifique
-model = mlflow.sklearn.load_model("models:/delay-forecast-model/1")
+2. Validation (Ground Truth)
 
-# Faire une prédiction
-prediction = model.predict([[15.0, 2.5, 20.0, 0, 0.7]])
+```bash
+POST /ground-truth
+{
+    "prediction_log_id": 148,
+    "actual_delay": 52.0
+}
 ```
 
 ### Promouvoir un modèle en Production
 
-Via l'interface MLflow (http://localhost:5000) :
+Via l'interface MLflow (<http://localhost:5000>) :
+
 1. Aller dans **Models**
 2. Sélectionner le modèle `delay-forecast-model`
 3. Cliquer sur une version
 4. Cliquer sur **Stage** → **Transition to Production**
 
-Ou via Python :
-```python
-from mlflow import MlflowClient
+## :test_tube: Tests & qualité
 
-client = MlflowClient(tracking_uri="http://mlflow:5000")
-client.transition_model_version_stage(
-    name="delay-forecast-model",
-    version=1,
-    stage="Production"
-)
-```
+- Tests unitaires dans `tests/`
+- Validation des pipelines ETL
+- Intégration continue via GitHub Actions
 
----
+### CI/CD
 
-## 📁 Structure du projet
+Le pipeline GitHub Actions (.github/workflows/) assure la qualité à chaque commit :
 
-```
-delay-forecast/
-├── docker-compose.yml      # Orchestration des services
-├── Makefile                # Commandes raccourcies
-├── .env.example            # Template des variables d'environnement
-├── libs/                   # Bibliothèques partagées
-│   ├── db/neon.py         # Connexion Neon DB
-│   └── storage/s3.py      # Client S3
-├── services/
-│   ├── airflow/
-│   │   ├── dags/          # DAGs Airflow
-│   │   ├── tasks/         # Scripts Python (ingestion, ETL, training)
-│   │   └── scripts/       # Scripts d'initialisation
-│   ├── api/               # API FastAPI
-│   └── mlflow/            # (Configuration MLflow)
-└── .github/workflows/     # CI/CD
-```
+- Validation du code Python (PEP8).
 
----
+- Exécution des tests unitaires et validation des connexions DB.
 
-## 👥 Équipe
+- Docker Build : Vérification de la constructibilité des images API et ETL.
 
-| Responsabilité | Composants |
-|----------------|------------|
-| Infrastructure | Docker, Airflow, MLflow |
-| Data Pipeline | Ingestion, ETL, Neon DB |
-| ML | Training, Evidently |
-| API | FastAPI, Prédictions |
+## :mag: Dépannage
+
+Airflow
+
+- DAGs non visibles → vérifier `AIRFLOW_HOME` et que `.env` est chargé
+- Tâches bloquées → logs dans Airflow UI (task instance logs)
+- Scheduler pas démarré → vérifier service `airflow-scheduler`
+
+MLflow
+
+- Runs absents → vérifier que MLflow tracking URI est bien défini (`mlflow.set_tracking_uri`)
+GitHub
+- Modèle non trouvé → vérifier que tu as bien enregistré le modèle dans le registry et qu’une version est en Production.
+
+FastAPI
+
+- Erreur de prédiction → logs API `docker-compose logs api`
+- Routes non disponibles → vérifier sur `/docs`
+
+Docker
+
+- Rebuild nécessaire → `make rebuild` pour forcer la reconstruction sans cache
+- Conteneurs qui plantent → `make logs` pour surveiller en continu
+
+## :compass: Roadmap
+
+- [x] Retraining automatique
+- [x] Monitoring du drift
+- [ ] Inclusion nouvelles API
+- [ ] Authentification API
+- [ ] Déploiement cloud
+
+## :busts_in_silhouette: Auteurs
+
+Projet développé par [Stéphane Durig](https://github.com/StephaneDurig), [Quentin Haentjens](https://github.com/Quentin-qha), [Nadège Lefort](https://github.com/nlefort), [Mathis Genton](https://github.com/matt-GTN)
+
+Sous la supervision de [Jedha](https://www.jedha.co/)
+
+*La réalisation de ce projet s'inscrit dans le cadre de la [formation Data Scientist](https://www.jedha.co/formations/formation-data-engineer) développé par [Jedha](https://www.jedha.co/), en vue de l'obtention de la certification professionnelle de niveau 7 (bac+7) enregistrée au RNCP : [Architecte en intelligence artificielle](https://www.francecompetences.fr/recherche/rncp/38777/).*
