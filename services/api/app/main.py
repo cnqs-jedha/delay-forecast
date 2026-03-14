@@ -15,14 +15,22 @@ from .weather_utils import get_weather_features, get_calendar_features
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Récupération de l'URI (par défaut http://mlflow:5000 pour Docker)
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 try:
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment("API_Production_Inference")
-    logger.info(f"Connexion réussie à MLflow sur {MLFLOW_TRACKING_URI}")
+    # On vérifie si on est en mode Test (GitHub Actions)
+    if os.getenv("DATABASE_URL") == "sqlite:///./ci_temp.db":
+        mlflow.set_tracking_uri("file:///tmp/mlflow_tests")
+        logger.info("Mode Test détecté : Utilisation d'un tracking MLflow local.")
+    else:
+        # Mode Production/Docker
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        # On tente de définir l'expérience pour vérifier la connexion
+        mlflow.set_experiment("API_Production_Inference")
+        logger.info(f"Connexion réussie à MLflow sur {MLFLOW_TRACKING_URI}")
 except Exception as e:
-    logger.warning(f"Impossible de se connecter à MLflow ({e}). L'API continuera sans tracking.")
+    logger.warning(f"Impossible de configurer MLflow ({e}). L'API continuera sans tracking distant.")
 
 
 @asynccontextmanager
