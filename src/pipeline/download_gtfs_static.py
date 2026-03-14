@@ -67,12 +67,17 @@ def download_gtfs_static(api_key: str = None, output_dir: Path = None) -> bool:
     print(f"   URL: {GTFS_STATIC_URL}")
     
     try:
-        response = requests.get(url, stream=True, timeout=120)
+        # ici pour stopper le téléchargement sur GitHub
+        if os.getenv("GITHUB_ACTIONS"):
+            print("\n[SKIP] GitHub Actions détecté : bypass du téléchargement GTFS pour la CI.")
+            return True
+
+        response = requests.get(url, stream=True, timeout=10)
         response.raise_for_status()
         
         # Sauvegarder le ZIP
         total_size = int(response.headers.get('content-length', 0))
-        downloaded = 0
+
         
         with open(zip_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
