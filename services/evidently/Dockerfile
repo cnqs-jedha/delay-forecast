@@ -1,28 +1,37 @@
+# Image Python légère
 FROM python:3.11-slim
-LABEL maintainer="delay-forecast-team"
 
+# Métadonnées
+LABEL maintainer="delay-forecast-team"
+LABEL description="Evidently AI - ML Monitoring Service"
+
+# Variables d'environnement
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
-ENV PYTHONPATH=/app 
-
+# Répertoire de travail
 WORKDIR /app
 
+# Dépendances système (pour psycopg2 et compilation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip
-RUN pip install evidently==0.4.0 --force-reinstall
-    
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -U pip
+# Copier et installer les dépendances Python
+COPY services/evidently/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir evidently uvicorn
 
+# Copier le code de l'application
 COPY services/evidently/app ./app
+
+# Créer le dossier pour stocker les rapports générés
 RUN mkdir -p /app/reports
 
+# Exposer le port
 EXPOSE 8001
-# On lance uvicorn depuis /app
+
+# Commande de démarrage
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
