@@ -54,5 +54,4 @@ htmlcov/
 mlflow_data/
 
 # Divers
-*.yaml
 mlflow/mlflow.db
