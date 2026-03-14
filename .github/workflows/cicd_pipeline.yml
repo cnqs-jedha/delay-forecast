@@ -28,7 +28,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_temp.db"
           PYTHONPATH: .
         run: |
-          pytest
+          python -m pytest
 
   # Job de construction et publication de l'image Docker (CD)
   build-and-push:
