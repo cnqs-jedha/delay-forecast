@@ -10,6 +10,11 @@ from .database import SessionLocal, engine, get_db
 from . import data_structure
 from .weather_utils import get_weather_features, get_calendar_features
 
+
+# Configuration des logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 try:
@@ -19,9 +24,6 @@ try:
 except Exception as e:
     logger.warning(f"Impossible de se connecter à MLflow ({e}). L'API continuera sans tracking.")
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
