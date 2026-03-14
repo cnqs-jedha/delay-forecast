@@ -14,7 +14,6 @@
 test.db
 *.log
 logs/
-*.yaml
 
 # Python
 __pycache__/
@@ -53,3 +52,7 @@ docs/private/
 .coverage
 htmlcov/
 mlflow/mlflow.db
+
+mlflow/
+mlartifacts/
+*.db

@@ -11,15 +11,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY}
     AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Paris
-    MLFLOW_TRACKING_URI: http://mlflow:5000
+    AIRFLOW_SMTP_USER: ${AIRFLOW_SMTP_USER}
+    AIRFLOW_SMTP_PASSWORD: ${AIRFLOW_SMTP_PASSWORD}
   volumes:
     - ./services/airflow/dags:/opt/airflow/dags
     - ./services/airflow/scripts:/opt/airflow/scripts
     - ./libs:/opt/project/libs
-    - ./src/pipeline:/opt/project/pipeline
-    - ./data:/opt/project/data
-    - ./data:/opt/data
-    - ./mlflow:/mlflow
   depends_on:
     airflow-db:
       condition: service_healthy
@@ -72,7 +69,7 @@ services:
         condition: service_completed_successfully
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.14.3
+    image: ghcr.io/mlflow/mlflow:latest
     container_name: mlflow
     env_file:
       - .env
@@ -80,9 +77,9 @@ services:
       MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
       MLFLOW_DEFAULT_ARTIFACT_ROOT: ${MLFLOW_DEFAULT_ARTIFACT_ROOT}
     volumes:
-      - ./mlflow:/mlflow
+      - ./mlflow_data:/mlflow
     command: >
-      bash -lc "mkdir -p /mlflow/artifacts && chmod -R 777 /mlflow && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT}"
+      bash -lc "mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} --artifacts-destination /mlflow/artifacts --serve-artifacts --allowed-hosts '*' --cors-allowed-origins '*'"
     ports:
       - "5000:5000"
     healthcheck:
@@ -92,9 +89,7 @@ services:
       retries: 20
 
   api:
-    build:
-      context: .
-      dockerfile: services/api/Dockerfile
+    image: ghcr.io/cnqs-jedha/delay-forecast:latest
     container_name: api
     env_file:
       - .env
@@ -108,7 +103,7 @@ services:
       mlflow:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "curl -fsS http://localhost:8000/ | grep -q 'Bienvenue'" ]
+      test: [ "CMD-SHELL", "curl -fsS http://localhost:8000/ | grep -q 'Bienvenue sur l'API de prédiction de retard des transports Stockholm Delay Forecast'" ]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -121,7 +116,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      NEON_DATABASE_URL: ${NEON_DATABASE_URL}
       DRIFT_THRESHOLD: ${DRIFT_THRESHOLD:-0.1}
     volumes:
       - evidently_reports:/app/reports
