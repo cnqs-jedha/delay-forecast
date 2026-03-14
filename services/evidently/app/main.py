@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 import pandas as pd
 
-from evidently import ColumnMapping
+from evidently.pipeline.column_mapping import ColumnMapping
 
 from app.config import settings
 from app.monitoring import monitor, MLMonitor

@@ -11,6 +11,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --upgrade pip
+RUN pip install evidently==0.4.0 --force-reinstall
+    
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -U pip
