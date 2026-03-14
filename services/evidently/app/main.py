@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 import pandas as pd
 
+from evidently import ColumnMapping
+
 from app.config import settings
 from app.monitoring import monitor, MLMonitor
 
@@ -72,6 +74,19 @@ class DriftReportResponse(BaseModel):
 class TestResultResponse(BaseModel):
     status: str
     all_tests_passed: bool
+    report_filename: str
+    timestamp: str
+
+
+class PerformanceDataRequest(BaseModel):
+    """Donnees predictions + ground truth pour le rapport de performance."""
+    data: list[dict]
+    prediction_column: str = "prediction_P50"
+    target_column: str = "actual_delay"
+
+
+class PerformanceReportResponse(BaseModel):
+    status: str
     report_filename: str
     timestamp: str
 
@@ -251,6 +266,40 @@ async def run_drift_tests(request: MonitoringDataRequest):
             report_filename=result["report_filename"],
             timestamp=result["timestamp"]
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/performance/report", response_model=PerformanceReportResponse, tags=["Monitoring"])
+async def generate_performance_report(request: PerformanceDataRequest):
+    """
+    Genere un rapport de performance du modele (MAE, RMSE, R2).
+
+    Recoit un DataFrame contenant les colonnes prediction et target (ground truth).
+    """
+    try:
+        df = pd.DataFrame(request.data)
+
+        if request.prediction_column not in df.columns or request.target_column not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Colonnes requises : '{request.prediction_column}' et '{request.target_column}'",
+            )
+
+        column_mapping = ColumnMapping(
+            target=request.target_column,
+            prediction=request.prediction_column,
+        )
+
+        result = monitor.generate_model_performance_report(df, column_mapping)
+
+        return PerformanceReportResponse(
+            status=result["status"],
+            report_filename=result["report_filename"],
+            timestamp=result["timestamp"],
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

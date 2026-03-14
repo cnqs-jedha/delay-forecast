@@ -1,109 +1,217 @@
+"""
+DAG Weekly Drift Detector
+Schedule : tous les dimanches a 23h00 UTC
+
+1. Synchronise la table ground_truth (predictions vs retards reels)
+2. Calcule la MAE recente (7j) et de reference (30j)
+3. Envoie une alerte email si le drift depasse le seuil
+"""
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-from dotenv import load_dotenv
-import psycopg2
 import sys
 import os
+import pandas as pd
 import smtplib
+import psycopg2
+import logging
+import requests
 from email.mime.text import MIMEText
 
+sys.path.insert(0, "/opt/project/pipeline")
 
-def drift_monitoring():
-    AIRFLOW_SMTP_USER = os.getenv("AIRFLOW_SMTP_USER")
-    AIRFLOW_SMTP_PASSWORD = os.getenv("AIRFLOW_SMTP_PASSWORD")
+logger = logging.getLogger(__name__)
 
-    # Récupère la prédiction de la table prediction log et récupère la vrai valeur dans la table transport_real_time 
-    # pour l'insérer dans la ground_truth
-    load_dotenv()
-    DATABASE_URL = os.getenv("DATABASE_URL")
+DRIFT_THRESHOLD = 1.5  # alerte si MAE recente > 1.5x MAE reference
 
-    conn = None
+
+def sync_ground_truth():
+    """Alimente la table ground_truth en joignant prediction_logs et stg_transport_realtime."""
+    from prediction_vs_ground_truth import sync_ground_truth_optimized
+    sync_ground_truth_optimized()
+
+
+def compute_drift():
+    """
+    Calcule le drift en comparant la MAE recente (7j) a la MAE de reference (30j).
+    Retourne les metriques via XCom.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-
-        # matching par Month/DOW/Hour car les dates absolues 
-        # ne correspondent pas forcément entre le staging et les logs.
-        # Le casting ::text et ::int assure que la jointure ne casse pas.
-        sync_query = """
-        INSERT INTO ground_truth (prediction_log_id, actual_delay, created_at)
-        SELECT DISTINCT ON (p.id)
-            p.id, 
-            r.departure_delay,
-            NOW()
-        FROM prediction_logs p
-        JOIN stg_transport_realtime r ON 
-            p.bus_nbr::text = r.bus_nbr::text 
-            AND p.direction_id::text = r.direction_id::text 
-            AND p.stop_sequence::int = r.stop_sequence::int
-            -- Matching structurel sur le temps
-            AND p.month = EXTRACT(MONTH FROM r.timestamp_rounded)
-            AND p.day_of_week = EXTRACT(DOW FROM r.timestamp_rounded)
-            AND p.hour = EXTRACT(HOUR FROM r.timestamp_rounded)
-        WHERE p.bus_nbr = '541'
-          AND NOT EXISTS (
-              SELECT 1 FROM ground_truth g WHERE g.prediction_log_id = p.id
-          )
-        ORDER BY p.id, r.timestamp_rounded DESC;
-        """
-
-        cur.execute(sync_query)
-        rows_inserted = cur.rowcount
-        conn.commit()
-
-        print(f"Synchronisation terminée : {rows_inserted} lignes ajoutées à ground_truth.")
-
-        # Check de performance : on calcule le MAE uniquement si de nouvelles données ont été insérées
-        if rows_inserted > 0:
-            check_mae_weekly_query = """
-            SELECT AVG(ABS(p."prediction_P50" - g.actual_delay)) as mae
+        # On utilise g.created_at (date de synchro) mais on élargit 
+        # la fenêtre pour être sûr d'inclure tes données du 7 mars.
+        
+        # 1. MAE RÉCENTE (On regarde les synchros des 14 derniers jours pour être large)
+        cur.execute("""
+            SELECT AVG(ABS(p."prediction_P50" - g.actual_delay))
             FROM prediction_logs p
             JOIN ground_truth g ON p.id = g.prediction_log_id
-            WHERE p.bus_nbr = '541';
-            """
-            cur.execute(check_mae_weekly_query)
-            mae_weekly = cur.fetchone()[0]
-            print(f"MAE actuelle sur la ligne 541 : {mae_weekly:.2f} secondes")
+            WHERE g.created_at >= NOW() - INTERVAL '14 days'
+        """)
+        mae_recent = cur.fetchone()[0]
 
-            check_mae_avg_query = """
-            SELECT AVG(ABS(p."prediction_P50")) as mae
+        # 2. MAE RÉFÉRENCE (30 jours)
+        cur.execute("""
+            SELECT AVG(ABS(p."prediction_P50" - g.actual_delay))
             FROM prediction_logs p
-            WHERE p.bus_nbr = '541';
-            """
-            cur.execute(check_mae_avg_query)
-            mae_avg = cur.fetchone()[0]
-            print(f"MAE moyenne sur la ligne 541 : {mae_avg:.2f} secondes")
+            JOIN ground_truth g ON p.id = g.prediction_log_id
+            WHERE g.created_at >= NOW() - INTERVAL '30 days'
+        """)
+        mae_reference = cur.fetchone()[0]
 
-            print(mae_weekly/mae_avg)
+        # 3. ÉCHANTILLONS RÉCENTS
+        cur.execute("""
+            SELECT COUNT(*) FROM ground_truth
+            WHERE created_at >= NOW() - INTERVAL '14 days'
+        """)
+        sample_count = cur.fetchone()[0]
 
-            # Calcul du drift et envoie d'un mail si drift suppérieur de 30%
-            drift_value = mae_weekly/mae_avg
-            print(drift_value)
-            if drift_value > 1.3:
-                # Construire le mail
-                msg = MIMEText(f"Drift détecté ! Valeur : {drift_value}")
-                msg["Subject"] = "Alerte Drift"
-                msg["From"] = AIRFLOW_SMTP_USER
-                msg["To"] = "cnsqjedha@gmail.com"
+        if mae_recent is None or mae_reference is None or mae_reference == 0:
+            logger.warning("Pas assez de donnees pour calculer le drift")
+            return {
+                "mae_recent": None,
+                "mae_reference": None,
+                "drift_ratio": None,
+                "sample_count": sample_count,
+                "drift_detected": False,
+            }
 
-                # Envoyer via SMTP
-                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                    server.login(AIRFLOW_SMTP_USER, AIRFLOW_SMTP_PASSWORD)
-                    server.send_message(msg)
+        drift_ratio = mae_recent / mae_reference
 
-                print(f"Mail envoyé — value={drift_value}")
+        logger.info(f"MAE recente (7j): {mae_recent:.2f}s")
+        logger.info(f"MAE reference (30j): {mae_reference:.2f}s")
+        logger.info(f"Drift ratio: {drift_ratio:.2f} (seuil: {DRIFT_THRESHOLD})")
+        logger.info(f"Echantillons (7j): {sample_count}")
 
-
-    except Exception as e:
-        print(f" Erreur lors de l'exécution : {e}")
-        if conn: conn.rollback()
+        return {
+            "mae_recent": round(mae_recent, 2),
+            "mae_reference": round(mae_reference, 2),
+            "drift_ratio": round(drift_ratio, 2),
+            "sample_count": sample_count,
+            "drift_detected": drift_ratio > DRIFT_THRESHOLD,
+        }
     finally:
-        if conn:
-            cur.close()
-            conn.close()
+        cur.close()
+        conn.close()
 
+
+def trigger_evidently_monitoring():
+    # 1. Extraction des données depuis Neon
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    conn = psycopg2.connect(DATABASE_URL)
     
+    # On récupère les données avec leur réalité (ground truth)
+    # On limite à 5000 pour ne pas surcharger l'API
+    query = """
+        SELECT p.*, g.actual_delay
+        FROM prediction_logs p
+        JOIN ground_truth g ON p.id = g.prediction_log_id
+        ORDER BY g.created_at DESC
+        LIMIT 5000;
+    """
+    df = pd.read_sql(query, conn)
+    conn.close()
+
+    if df.empty:
+        print("Pas de données dans ground_truth, monitoring annulé.")
+        return
+
+    # pour que le JSON puisse les accepter
+    for col in df.select_dtypes(include=['datetime64', 'datetimetz']).columns:
+        df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    # --- NETTOYAGE RENFORCÉ ---
+    # Étape A : Remplacer les infinis par 0
+    df = df.replace([float('inf'), float('-inf')], 0)
+    
+    # Étape B : Convertir les colonnes numériques en float standard (évite les types numpy bizarres)
+    # Puis remplir les NaN avec une valeur sûre (0 ou null)
+    df = df.fillna(0) # On remplace tout ce qui est vide par 0 pour le calcul de MAE
+    
+    # Étape C : Sécurité ultime avant conversion dict
+    data_records = df.to_dict(orient="records")
+    # ----------------------------------
+    # 2. Préparation du payload pour Evidently
+    # On transforme le DataFrame en liste de dictionnaires (JSON compatible)
+    data_payload = {"data": df.to_dict(orient="records")}
+
+    # 3. Envoi au service Monitoring (Utilise le nom du service Docker)
+    MONITORING_URL = "http://evidently:8001" # Ajuste selon ton docker-compose
+    
+    try:
+        # On définit d'abord ces données comme la nouvelle référence
+        requests.post(f"{MONITORING_URL}/reference", json=data_payload)
+        
+        # On génère le rapport de drift
+        response = requests.post(f"{MONITORING_URL}/drift/report", json=data_payload)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Rapport généré : {result['report_filename']}")
+            print(f"Drift détecté : {result['drift_detected']}")
+        else:
+            print(f"Erreur API : {response.text}")
+            
+    except Exception as e:
+        print(f"Erreur de connexion au service Monitoring : {e}")
+
+def send_alert(**context):
+    """Envoie un email d'alerte si un drift est detecte."""
+    ti = context["ti"]
+    metrics = ti.xcom_pull(task_ids="compute_drift")
+
+    if not metrics:
+        logger.info("Aucune metrique disponible, pas d'alerte")
+        return
+
+    drift_detected = metrics.get("drift_detected", False)
+    mae_recent = metrics.get("mae_recent")
+    mae_reference = metrics.get("mae_reference")
+    drift_ratio = metrics.get("drift_ratio")
+    sample_count = metrics.get("sample_count", 0)
+
+    smtp_user = os.getenv("AIRFLOW_SMTP_USER")
+    smtp_password = os.getenv("AIRFLOW_SMTP_PASSWORD")
+
+    if not smtp_user or not smtp_password:
+        logger.warning("SMTP non configure, alerte non envoyee")
+        return
+
+    if drift_detected:
+        subject = "ALERTE DRIFT - Delay Forecast"
+        body = (
+            f"Drift detecte sur le modele de prediction.\n\n"
+            f"MAE recente (7j) : {mae_recent}s\n"
+            f"MAE reference (30j) : {mae_reference}s\n"
+            f"Drift ratio : {drift_ratio} (seuil: {DRIFT_THRESHOLD})\n"
+            f"Echantillons : {sample_count}\n\n"
+            f"Action recommandee : re-entrainer le modele."
+        )
+    else:
+        subject = "Drift Report OK - Delay Forecast"
+        body = (
+            f"Pas de drift detecte.\n\n"
+            f"MAE recente (7j) : {mae_recent}s\n"
+            f"MAE reference (30j) : {mae_reference}s\n"
+            f"Drift ratio : {drift_ratio} (seuil: {DRIFT_THRESHOLD})\n"
+            f"Echantillons : {sample_count}"
+        )
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = smtp_user
+    msg["To"] = smtp_user
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+
+    logger.info(f"Email envoye — drift_detected={drift_detected}, ratio={drift_ratio}")
+
 
 with DAG(
     dag_id="weekly_drift_detector",
@@ -113,7 +221,29 @@ with DAG(
     tags=["drift", "monitoring"],
 ) as dag:
 
-    PythonOperator(
-        task_id="weekly_drift_detector",
-        python_callable=drift_monitoring,
+    t_sync = PythonOperator(
+        task_id="sync_ground_truth",
+        python_callable=sync_ground_truth,
     )
+
+    t_compute = PythonOperator(
+        task_id="compute_drift",
+        python_callable=compute_drift,
+    )
+
+    t_evidently = PythonOperator(
+        task_id="generate_evidently_reports",
+        python_callable=trigger_evidently_monitoring,
+    )
+
+    t_alert = PythonOperator(
+        task_id="send_alert",
+        python_callable=send_alert,
+    )
+
+    # --- Logique de dépendances ---
+    # 1. On synchronise d'abord
+    # 2. On lance le calcul du drift ET le rapport détaillé en parallèle
+    # 3. L'alerte email part une fois le calcul terminé
+    t_sync >> [t_compute, t_evidently]
+    t_compute >> t_alert

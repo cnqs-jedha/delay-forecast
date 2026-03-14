@@ -51,7 +51,8 @@ docs/private/
 .pytest_cache/
 .coverage
 htmlcov/
-mlflow_data/
-
-# Divers
 mlflow/mlflow.db
+
+mlflow/
+mlartifacts/
+*.db

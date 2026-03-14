@@ -18,7 +18,7 @@ db_url = os.getenv("DATABASE_URL")
 
 # --- CONFIGURATION MLFLOW ---
 import tempfile
-mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_tracking_uri("http://mlflow:5000")
 experiment_name = "Retards_transports_Stockholm_v8"
 
 # Assurer un dossier local pour les artifacts si le serveur est mal configuré
@@ -206,101 +206,89 @@ def train_quantile_models():
     print(f"\nEntraînement de {len(quantiles)} modèles quantiles")
     print("-" * 80)
     
-    with mlflow.start_run(run_name="quantile_bundle_v2_fixed"):
-        # Log des paramètres globaux
-        mlflow.log_param("n_estimators", 300)
-        mlflow.log_param("max_depth", 5)
-        mlflow.log_param("learning_rate", 0.05)
-        mlflow.log_param("n_features", X.shape[1])
-        mlflow.log_param("n_train", len(X_train))
-        mlflow.log_param("n_test", len(X_test))
+    # Dictionnaire pour stocker les modèles
+    all_trained_models = {}
+    input_example = X_train.head(1)
+    
+    # === ENTRAINEMENT DES MODELES (sans dépendance MLflow) ===
+    for alpha, name in zip(quantiles, names):
+        print(f"\n Entrainement du modele {name} (alpha={alpha})...")
         
-        # Log de l'exemple d'input pour signature
-        input_example = X_train.head(1)
+        model = GradientBoostingRegressor(
+            loss="quantile",
+            alpha=alpha,
+            n_estimators=300,
+            max_depth=5,
+            learning_rate=0.05,
+            random_state=42
+        )
         
-        all_trained_models = {} # Dictionnaire pour enregistrer les modèles
+        model.fit(X_train, y_train)
+        all_trained_models[name] = model
+        preds = model.predict(X_test)
+
+        # Calcul des métriques
+        mae = mean_absolute_error(y_test, preds)
+        rmse = root_mean_squared_error(y_test, preds)
+        r2 = r2_score(y_test, preds)
+        reliability = (y_test <= preds).mean()
         
-        for alpha, name in zip(quantiles, names):
-            print(f"\n Entraînement du modèle {name} (alpha={alpha})...")
-            
-            model = GradientBoostingRegressor(
-                loss="quantile",
-                alpha=alpha,
-                n_estimators=300,
-                max_depth=5,
-                learning_rate=0.05,
-                random_state=42
-            )
-            
-            model.fit(X_train, y_train)
-            all_trained_models[name] = model # Stockage de l'objet model
-            preds = model.predict(X_test)
+        mean_pred = preds.mean()
+        mean_actual = y_test.mean()
 
-            # Calcul des métriques
-            mae = mean_absolute_error(y_test, preds)
-            rmse = root_mean_squared_error(y_test, preds)
-            r2 = r2_score(y_test, preds)
-            reliability = (y_test <= preds).mean()  # % de fois où prédiction > réel
-            
-            # Métriques additionnelles
-            mean_pred = preds.mean()
-            mean_actual = y_test.mean()
-            
-            # Log MLflow
-            mlflow.log_metric(f"{name}_mae", mae)
-            mlflow.log_metric(f"{name}_mae_minutes", mae/60)
-            mlflow.log_metric(f"{name}_rmse", rmse)
-            mlflow.log_metric(f"{name}_r2", r2)
-            mlflow.log_metric(f"{name}_reliability", reliability)
-            mlflow.log_metric(f"{name}_mean_pred", mean_pred)
-            
-            # Log du modèle avec signature et exemple
-            mlflow.sklearn.log_model(
-                model, 
-                name,  # Utiliser 'name' au lieu de 'artifact_path'
-                input_example=input_example
-            )
-
-            print(f" MAE       : {mae:.2f}s ({mae/60:.2f} min)")
-            print(f" RMSE      : {rmse:.2f}s ({rmse/60:.2f} min)")
-            print(f" R²        : {r2:.3f}")
-            print(f" Fiabilité : {reliability:.1%}")
-            print(f" Prédiction moyenne : {mean_pred:.1f}s")
-            print(f" Retard moyen réel  : {mean_actual:.1f}s")
-
- 
-            
-        # Feature importance du dernier modèle (P90)
-        feature_importance = pd.DataFrame({
-            'feature': X.columns,
-            'importance': model.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
-        print("\nTop 10 features les plus importantes (P90) :")
-        print(feature_importance.head(10).to_string(index=False))
-        
-        # Sauvegarder comme artifact
-        feature_importance.to_csv("feature_importance.csv", index=False)
-        mlflow.log_artifact("feature_importance.csv")
-
-    print("\n" + "="*80)
-    print("ENTRAÎNEMENT TERMINÉ")
-    print("="*80)
-
-    # --- SAUVEGARDE DES 3 MODELES ---
+        print(f" MAE       : {mae:.2f}s ({mae/60:.2f} min)")
+        print(f" RMSE      : {rmse:.2f}s ({rmse/60:.2f} min)")
+        print(f" R2        : {r2:.3f}")
+        print(f" Fiabilite : {reliability:.1%}")
+        print(f" Prediction moyenne : {mean_pred:.1f}s")
+        print(f" Retard moyen reel  : {mean_actual:.1f}s")
+    
+    # Feature importance du dernier modèle (P90)
+    feature_importance = pd.DataFrame({
+        'feature': X.columns,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    print("\nTop 10 features les plus importantes (P90) :")
+    print(feature_importance.head(10).to_string(index=False))
+    
+    # === SAUVEGARDE LOCALE DU MODELE (AVANT MLflow) ===
     current_file = Path(__file__).resolve()
     project_root = current_file.parent.parent.parent 
     model_dir = project_root / "models"
-    
-    # Création du dossier s'il n'existe pas
     model_dir.mkdir(parents=True, exist_ok=True)
-
-    # On sauvegarde le dictionnaire contenant P50, P80 et P90
+    
     model_path = model_dir / "50_80_90_models_quantiles.pkl"
     joblib.dump(all_trained_models, model_path)
     
-    print(f"Succès : Pack de {len(all_trained_models)} modèles sauvegardé.")
+    print(f"\n[OK] Pack de {len(all_trained_models)} modeles sauvegarde.")
     print(f"Chemin : {model_path}")
+    
+    # === LOG MLFLOW (optionnel - si serveur disponible) ===
+    try:
+        with mlflow.start_run(run_name="quantile_bundle_v2_fixed"):
+            mlflow.log_param("n_estimators", 300)
+            mlflow.log_param("max_depth", 5)
+            mlflow.log_param("learning_rate", 0.05)
+            mlflow.log_param("n_features", X.shape[1])
+            mlflow.log_param("n_train", len(X_train))
+            mlflow.log_param("n_test", len(X_test))
+            
+            for name, m in all_trained_models.items():
+                preds = m.predict(X_test)
+                mlflow.log_metric(f"{name}_mae", mean_absolute_error(y_test, preds))
+                mlflow.log_metric(f"{name}_r2", r2_score(y_test, preds))
+            
+            feature_importance.to_csv("feature_importance.csv", index=False)
+            mlflow.log_artifact("feature_importance.csv")
+            
+        print("[OK] Metriques enregistrees dans MLflow")
+    except Exception as e:
+        print(f"[INFO] MLflow non disponible (normal en local) : {type(e).__name__}")
+
+    print("\n" + "="*80)
+    print("ENTRAINEMENT TERMINE")
+    print("="*80)
 
 if __name__ == "__main__":
     train_quantile_models()

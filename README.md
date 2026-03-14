@@ -2,7 +2,7 @@
 
 Ce projet est un POC MLOps de prédiction de retards de transports en commun en fonction de contextes externes (météo, jours fériés, temporalité, etc.).
 
-Il combine ingestion de données, transformation, entraînement de modèles, suivi des performances et exposition via une API de prédiction.
+Il implémente une boucle de feedback complète : de l'ingestion automatisée au monitoring du drift de performance en production.
 
 📍 Les données utilisées concernent les transports en commun de la ville de Stockholm.
 
@@ -10,13 +10,12 @@ Il combine ingestion de données, transformation, entraînement de modèles, sui
 
 Le projet couvre l’ensemble du cycle de vie Machine Learning :
 
-1. Ingestion de données via appels API
-2. Stockage des données brutes
-3. Transformation et feature engineering
-4. Entraînement et suivi des modèles
-5. Versioning des modèles
-6. Exposition via une API REST
-7. Automatisation du pipeline MLOps
+1. Ingestion & ETL : Pipelines automatisés (Airflow) vers Neon Postgres & S3.
+2. Experiment Tracking : Suivi des entraînements et versioning des modèles (MLflow).
+3. Model Serving : API REST haute performance (FastAPI) avec enrichissement météo temps réel.
+4. Observabilité : Tracking systématique des prédictions et boucle de feedback (Ground Truth).
+5. Monitoring : Analyse hebdomadaire du drift de données et de performance (Evidently AI).
+6. CI/CD : Validation automatique du code et des images (GitHub Actions).
 
 ## :brain: Flux global du projet
 
@@ -39,6 +38,9 @@ Le projet couvre l’ensemble du cycle de vie Machine Learning :
      API FastAPI → Prédictions
             ↓
       Monitoring / logs
+            ↓
+        Evidently → Analyse du drift
+        (monitoring)      
 
 ```
 
@@ -77,6 +79,7 @@ delay-forecast/
 | S3                | Stockage des données brutes et artefacts ML       |
 | Docker Compose    | Environnement reproductible                       |
 | GitHub Actions    | Intégration continue (tests & qualité)            |
+| Evidently AI      | Calcul des métriques de Data drift                |
 
 ### Interactions entre les modules
 
@@ -105,9 +108,9 @@ http://localhost:8000/docs
 
 ### MLFlow
 
-- **Interface Web** : http://localhost:5000
-- **Tracking URI (depuis les conteneurs)** : `http://mlflow:5000`
-- **Tracking URI (depuis l'hôte)** : `http://localhost:5000`
+- **Interface Web** : <http://localhost:5000>
+- **Tracking URI (depuis les conteneurs)** : <http://mlflow:5000>
+- **Tracking URI (depuis l'hôte)** : <http://localhost:5000>
 
 MLFlow permet de :
 
@@ -116,6 +119,16 @@ MLFlow permet de :
 - gérer les versions,
 - promouvoir un modèle de production
 
+### Monitoring et boucle de feedback
+
+Le projet implémente un système d'observabilité proactif :
+
+1. Tracking d'Inférence : Chaque appel à `/predict` enregistre les features d'entrée et la prédiction dans MLflow (metrics) et Postgres.
+
+Collecte de la Vérité (Ground Truth) : L'endpoint `/ground-truth` permet d'associer le retard réel observé à une prédiction passée.
+
+Détection du Drift : Le DAG `weekly_drift_detector` génère des rapports Evidently comparant les prédictions à la réalité pour détecter toute chute de précision (MAE/RMSE).
+
 ## :atom_symbol: Installation
 
 Prérequis
@@ -123,12 +136,14 @@ Prérequis
 - Docker
 - Docker Compose
 - Make
+- Clé API Trafiklab (GTFS Regional Static)
 
 Etapes
 
 ```bash
 git clone https://github.com/cnqs-jedha/delay-forecast.git
 cd delay-forecast
+# Configurer l'environnement
 cp .env.example .env
 ```
 
@@ -158,10 +173,12 @@ make rebuild  # Reconstruire les images sans cache
 
 | Service | URL | Description |
 | ------- | --- | ----------- |
-| Airflow | http://localhost:8080 | Orchestration des pipelines (admin/admin) |
-| MLflow | http://localhost:5000 | Tracking des expériences ML |
-| API | http://localhost:8000 | API de prédiction |
-| API Docs | http://localhost:8000/docs | Documentation Swagger |
+| Airflow | <http://localhost:8080> | Orchestration des pipelines (admin/admin) |
+| MLflow | <http://localhost:5000> | Tracking des expériences ML |
+| API | <http://localhost:8000> | API de prédiction |
+| API Docs | <http://localhost:8000/docs> | Documentation Swagger |
+| Evidently | <http://localhost:8001/docs> | Documentation |
+| Evidently | <http://localhost:8001/dashboard> | Visualisation des rapports|
 
 ### Utilisation
 
@@ -170,7 +187,11 @@ make rebuild  # Reconstruire les images sans cache
 3. Mettre un modèle en stage Production
 4. Appeler l’API `/predict`
 
-### Exemple de prédiction
+### Exemple d'utilisation du pipeline
+
+1. Prédiction
+
+L'API enrichit automatique la requête avec les données météo actuelles avant de prédire
 
 Requête
 
@@ -181,12 +202,12 @@ POST/predict
 ```json
 {
     "direction_id" : 1,
-    "month": 1,
-    "day": 8,
+    "month": 3,
+    "day": 6,
     "hour": 20,
     "day_of_week": 4,
     "bus_nbr": "541",
-    "stop_sequence": 1
+    "stop_sequence": 13
 }
 ```
 
@@ -200,9 +221,19 @@ Réponse
 }
 ```
 
+2. Validation (Ground Truth)
+
+```bash
+POST /ground-truth
+{
+    "prediction_log_id": 148,
+    "actual_delay": 52.0
+}
+```
+
 ### Promouvoir un modèle en Production
 
-Via l'interface MLflow (http://localhost:5000) :
+Via l'interface MLflow (<http://localhost:5000>) :
 
 1. Aller dans **Models**
 2. Sélectionner le modèle `delay-forecast-model`
@@ -214,6 +245,16 @@ Via l'interface MLflow (http://localhost:5000) :
 - Tests unitaires dans `tests/`
 - Validation des pipelines ETL
 - Intégration continue via GitHub Actions
+
+### CI/CD
+
+Le pipeline GitHub Actions (.github/workflows/) assure la qualité à chaque commit :
+
+- Validation du code Python (PEP8).
+
+- Exécution des tests unitaires et validation des connexions DB.
+
+- Docker Build : Vérification de la constructibilité des images API et ETL.
 
 ## :mag: Dépannage
 
@@ -241,15 +282,15 @@ Docker
 
 ## :compass: Roadmap
 
-* [x] Retraining automatique
-* [x] Monitoring du drift
-* [ ] Inclusion nouvelles API
-* [ ] Authentification API
-* [ ] Déploiement cloud
+- [x] Retraining automatique
+- [x] Monitoring du drift
+- [ ] Inclusion nouvelles API
+- [ ] Authentification API
+- [ ] Déploiement cloud
 
 ## :busts_in_silhouette: Auteurs
 
-rojet développé par [Stéphane Durig](https://github.com/StephaneDurig), [Quentin Haentjens](https://github.com/Quentin-qha), [Nadège Lefort](https://github.com/nlefort), [Mathis Genton](https://github.com/matt-GTN)
+Projet développé par [Stéphane Durig](https://github.com/StephaneDurig), [Quentin Haentjens](https://github.com/Quentin-qha), [Nadège Lefort](https://github.com/nlefort), [Mathis Genton](https://github.com/matt-GTN)
 
 Sous la supervision de [Jedha](https://www.jedha.co/)
 
