@@ -122,4 +122,6 @@ async def add_ground_truth(data: GroundTruthInput, db: Session = Depends(get_db)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # On ne lance uvicorn que si on n'est pas dans un environnement de test
+    if not os.getenv("DATABASE_URL", "").startswith("sqlite"):
+        uvicorn.run(app, host="0.0.0.0", port=8000)
