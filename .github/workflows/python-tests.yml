@@ -25,11 +25,10 @@ jobs:
 
     - name: Lancement des tests
       env:
-        # On utilise SQLite même pour l'app globale pendant les tests pour éviter toute erreur de connexion
         DATABASE_URL: "sqlite:///./ci_temp.db"
         PYTHONPATH: .
       run: |
-        python -m pytest
+        python -m pytest -v -s --maxfail=1 --durations=5
 
   # Job de construction et publication de l'image Docker (CD)
   build-and-push:
