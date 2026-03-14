@@ -11,8 +11,14 @@ from . import data_structure
 from .weather_utils import get_weather_features, get_calendar_features
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment("API_Production_Inference")
+
+try:
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment("API_Production_Inference")
+    logger.info(f"Connexion réussie à MLflow sur {MLFLOW_TRACKING_URI}")
+except Exception as e:
+    logger.warning(f"Impossible de se connecter à MLflow ({e}). L'API continuera sans tracking.")
+
 # Configuration des logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,18 +69,23 @@ async def predict(data: PredictionInput, db: Session = Depends(get_db)):
         print(f"Erreur météo : {e}")
         raise HTTPException(status_code=503, detail=str(e))
     
+
     # 3. Prédiction et tracking mlflow
     try:
-        if mlflow.active_run():
-            mlflow.end_run()
-        # On peut logger chaque appel d'API comme une "inférence" dans MLflow
-        with mlflow.start_run(run_name="API_Inference"):
+        try:
+            if mlflow.active_run():
+                mlflow.end_run()
+            with mlflow.start_run(run_name="API_Inference"):
+                predictions = model_instance.predict(features)
+                mlflow.log_params(data.model_dump())
+                mlflow.log_metric("predicted_delay", predictions.get("prediction_P50", 0))
+        except Exception as mlflow_error:
+            logger.warning(f"Tracking MLflow échoué, mais calcul de la prédiction en cours... ({mlflow_error})")
+            # Si MLflow rate, on calcule quand même la prédiction !
             predictions = model_instance.predict(features)
-            mlflow.log_params(data.model_dump()) # On log ce que l'utilisateur a envoyé
-            mlflow.log_metric("predicted_delay", predictions.get("prediction_P50", 0))
 
     except Exception as e:
-        logger.error(f"Erreur lors de la prédiction : {e}")
+        logger.error(f"Erreur critique lors de la prédiction : {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     # 4. Log en DB
