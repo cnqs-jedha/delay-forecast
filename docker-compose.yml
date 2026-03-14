@@ -96,6 +96,7 @@ services:
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
+      - ./mlflow_data:/mlflow
       - ./models:/app/models
     ports:
       - "8000:8000"
@@ -111,7 +112,7 @@ services:
   evidently:
     build:
       context: .
-      dockerfile: services/evidently/Dockerfile
+      dockerfile: /services/evidently/Dockerfile
     container_name: evidently
     env_file:
       - .env

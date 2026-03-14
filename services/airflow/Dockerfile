@@ -7,5 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER airflow
 
-COPY services/airflow/requirements.txt /requirements.txt
+# On repart de la racine du projet
+COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
