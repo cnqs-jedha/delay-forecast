@@ -52,3 +52,4 @@ docs/private/
 .pytest_cache/
 .coverage
 htmlcov/
+mlflow/mlflow.db
